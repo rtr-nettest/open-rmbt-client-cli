@@ -3,11 +3,15 @@ use std::time::{Duration, Instant};
 
 use crate::connection::RmbtConn;
 
-#[allow(dead_code)]
+const SAMPLE_INTERVAL: Duration = Duration::from_millis(40);
+
 pub struct TransferResult {
     pub bytes:      u64,
     pub elapsed_ns: u64,
     pub thread_id:  usize,
+    /// (cumulative_bytes, time_ns_from_phase_start) — one entry per 40 ms interval
+    /// plus a final entry that uses the server-reported elapsed time.
+    pub samples:    Vec<(u64, u64)>,
 }
 
 pub struct PingResult {
@@ -83,13 +87,22 @@ pub fn run_download(
 
     conn.write_line(&format!("GETTIME {duration_secs} {chunk_size}"))?;
 
-    let t0        = Instant::now();
-    let mut total = 0u64;
-    let mut buf   = vec![0u8; chunk_size];
+    let t0          = Instant::now();
+    let mut total   = 0u64;
+    let mut buf     = vec![0u8; chunk_size];
+    let mut samples = Vec::new();
+    let mut last_sample = t0;
 
     loop {
         conn.read_exact(&mut buf)?;
         total += chunk_size as u64;
+
+        let now = Instant::now();
+        if now.duration_since(last_sample) >= SAMPLE_INTERVAL {
+            samples.push((total, now.duration_since(t0).as_nanos() as u64));
+            last_sample = now;
+        }
+
         if *buf.last().unwrap() == 0xFF {
             break;
         }
@@ -99,6 +112,9 @@ pub fn run_download(
     let time_line  = conn.read_line()?;
     let elapsed_ns = parse_time_ns(&time_line)?;
 
+    // Final entry uses the server-reported elapsed time for accuracy.
+    samples.push((total, elapsed_ns));
+
     println!(
         "  dl[{thread_id:2}]  {:.2} Mbit/s  ({total} bytes in {:.3}s, client {:.3}s)",
         total as f64 * 8.0 / (elapsed_ns as f64 / 1e9) / 1_000_000.0,
@@ -106,12 +122,13 @@ pub fn run_download(
         t0.elapsed().as_secs_f64(),
     );
 
-    Ok(TransferResult { bytes: total, elapsed_ns, thread_id })
+    Ok(TransferResult { bytes: total, elapsed_ns, thread_id, samples })
 }
 
 // ─── Upload (PUTNORESULT with optional client-side intermediate output) ───────
 
 /// `intermediate=true` prints a throughput line every ~40 ms while uploading.
+/// Speed samples are always collected regardless of the `intermediate` flag.
 pub fn run_upload(
     conn:          &mut RmbtConn,
     duration_secs: u32,
@@ -134,13 +151,12 @@ pub fn run_upload(
     let mut chunk = vec![0u8; chunk_size];
     fastrand::fill(&mut chunk);
 
-    let deadline   = Instant::now() + Duration::from_secs(duration_secs as u64);
-    let t0         = Instant::now();
-    let mut total  = 0u64;
-
-    let report_interval       = Duration::from_millis(40);
-    let mut last_report       = Instant::now();
-    let mut last_report_bytes = 0u64;
+    let deadline            = Instant::now() + Duration::from_secs(duration_secs as u64);
+    let t0                  = Instant::now();
+    let mut total           = 0u64;
+    let mut samples         = Vec::new();
+    let mut last_sample     = t0;
+    let mut last_sample_bytes = 0u64;
 
     loop {
         let terminal = Instant::now() >= deadline;
@@ -148,19 +164,26 @@ pub fn run_upload(
         conn.write_bytes(&chunk)?;
         total += chunk_size as u64;
 
-        if intermediate {
+        // Don't record a sample on the terminal iteration — the authoritative
+        // final entry (with server-reported time) is always pushed after the loop.
+        if !terminal {
             let now = Instant::now();
-            if now.duration_since(last_report) >= report_interval || terminal {
-                let dt = now.duration_since(last_report).as_secs_f64();
-                let db = total - last_report_bytes;
-                if dt > 0.0 {
-                    println!(
-                        "  ul[{thread_id:2}] +{:.2} Mbit/s",
-                        db as f64 * 8.0 / dt / 1_000_000.0,
-                    );
+            if now.duration_since(last_sample) >= SAMPLE_INTERVAL {
+                samples.push((total, now.duration_since(t0).as_nanos() as u64));
+
+                if intermediate {
+                    let dt = now.duration_since(last_sample).as_secs_f64();
+                    let db = total - last_sample_bytes;
+                    if dt > 0.0 {
+                        println!(
+                            "  ul[{thread_id:2}] +{:.2} Mbit/s",
+                            db as f64 * 8.0 / dt / 1_000_000.0,
+                        );
+                    }
                 }
-                last_report       = now;
-                last_report_bytes = total;
+
+                last_sample       = now;
+                last_sample_bytes = total;
             }
         }
 
@@ -171,6 +194,9 @@ pub fn run_upload(
     let time_line  = conn.read_line()?;
     let elapsed_ns = parse_time_ns(&time_line)?;
 
+    // Final entry: total bytes with server-reported elapsed time.
+    samples.push((total, elapsed_ns));
+
     println!(
         "  ul[{thread_id:2}]  {:.2} Mbit/s  ({total} bytes in {:.3}s, client {:.3}s)",
         total as f64 * 8.0 / (elapsed_ns as f64 / 1e9) / 1_000_000.0,
@@ -178,7 +204,7 @@ pub fn run_upload(
         t0.elapsed().as_secs_f64(),
     );
 
-    Ok(TransferResult { bytes: total, elapsed_ns, thread_id })
+    Ok(TransferResult { bytes: total, elapsed_ns, thread_id, samples })
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

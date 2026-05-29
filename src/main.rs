@@ -234,18 +234,22 @@ fn main() -> Result<()> {
     }).collect();
 
     let speed_detail: Vec<control::SpeedItem> =
-        dl_results.iter().map(|r| control::SpeedItem {
-            direction: "download".into(),
-            thread:    r.thread_id,
-            time:      r.elapsed_ns,
-            bytes:     r.bytes,
-        })
-        .chain(ul_results.iter().map(|r| control::SpeedItem {
-            direction: "upload".into(),
-            thread:    r.thread_id,
-            time:      r.elapsed_ns,
-            bytes:     r.bytes,
-        }))
+        dl_results.iter()
+            .flat_map(|r| r.samples.iter().map(move |&(bytes, time)| control::SpeedItem {
+                direction: "download".into(),
+                thread:    r.thread_id,
+                time,
+                bytes,
+            }))
+        .chain(
+            ul_results.iter()
+                .flat_map(|r| r.samples.iter().map(move |&(bytes, time)| control::SpeedItem {
+                    direction: "upload".into(),
+                    thread:    r.thread_id,
+                    time,
+                    bytes,
+                }))
+        )
         .collect();
 
     let client_name = match protocol {
