@@ -57,8 +57,10 @@ enum ConnInner {
 
 /// A single connection to an RMBT test server, after HTTP upgrade and greeting.
 pub struct RmbtConn {
-    inner:          ConnInner,
-    pub chunk_size: usize,
+    inner:              ConnInner,
+    pub chunk_size:     usize,
+    pub chunk_size_min: usize,
+    pub chunk_size_max: usize,
 }
 
 impl RmbtConn {
@@ -98,7 +100,7 @@ impl RmbtConn {
             }
         };
 
-        Ok(Self { inner, chunk_size: 4096 })
+        Ok(Self { inner, chunk_size: 4096, chunk_size_min: 1024, chunk_size_max: 4 * 1024 * 1024 })
     }
 
     /// Perform the RMBT greeting:
@@ -124,9 +126,12 @@ impl RmbtConn {
 
         let cs_line = self.read_line()?;
         if let Some(rest) = cs_line.strip_prefix("CHUNKSIZE ") {
-            if let Some(sz) = rest.split_whitespace().next().and_then(|s| s.parse::<usize>().ok()) {
-                self.chunk_size = sz;
-            }
+            let parts: Vec<usize> = rest.split_whitespace()
+                .filter_map(|s| s.parse().ok())
+                .collect();
+            if !parts.is_empty() { self.chunk_size     = parts[0]; }
+            if parts.len() >= 2  { self.chunk_size_min = parts[1]; }
+            if parts.len() >= 3  { self.chunk_size_max = parts[2]; }
         }
 
         Ok(())
