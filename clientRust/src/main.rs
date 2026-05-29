@@ -11,6 +11,8 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 
 const MAX_THREADS: usize = 20;
+const MODEL:       &str  = "Client CLI Rust";
+const VERSION:     &str  = match option_env!("GIT_VERSION") { Some(v) => v, None => "dev" };
 
 fn main() -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -75,7 +77,13 @@ fn main() -> Result<()> {
         )
         .get_matches();
 
-    let host          = matches.get_one::<String>("host").unwrap().as_str();
+    let raw_host      = matches.get_one::<String>("host").unwrap();
+    let host_owned    = if raw_host.starts_with("http://") || raw_host.starts_with("https://") {
+        raw_host.clone()
+    } else {
+        format!("https://{raw_host}")
+    };
+    let host          = host_owned.as_str();
     let port_ovr      = matches.get_one::<u16>("port").copied();
     let threads_ovr   = matches.get_one::<usize>("threads").copied();
     let dur_ovr       = matches.get_one::<u32>("duration").copied();
@@ -93,7 +101,7 @@ fn main() -> Result<()> {
         Some(s) => s.clone(),
         None => {
             let stored = uuid_store::load();
-            let uuid = control::request_settings(host, stored.as_deref(), debug)?;
+            let uuid = control::request_settings(host, stored.as_deref(), VERSION, debug)?;
             if stored.as_deref() != Some(uuid.as_str()) {
                 uuid_store::save(&uuid);
             }
@@ -104,7 +112,7 @@ fn main() -> Result<()> {
 
     // ── Step 1: request test parameters from the control server ──────────────
     println!("Contacting control server: {host}");
-    let params = control::request_test(host, Some(uuid), force_ws, debug)?;
+    let params = control::request_test(host, Some(uuid), VERSION, force_ws, debug)?;
 
     let preview_token = &params.token[..params.token.len().min(40)];
     println!("Token:    {preview_token}…");
@@ -261,10 +269,10 @@ fn main() -> Result<()> {
         client_language:         "en".into(),
         client_name,
         client_uuid:             Some(uuid.to_string()),
-        client_version:          "0.9".into(),
-        client_software_version: "0.9".into(),
+        client_version:          VERSION.into(),
+        client_software_version: VERSION.into(),
         geo_locations:           vec![],
-        model:                   "rmbt-client".into(),
+        model:                   MODEL.into(),
         network_type:            98,
         platform:                "CLI".into(),
         product:                 "rmbt-client".into(),

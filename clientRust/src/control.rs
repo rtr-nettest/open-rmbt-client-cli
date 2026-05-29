@@ -157,7 +157,7 @@ pub struct TestResultSubmission {
 
 /// POST `{host}/RMBTControlServer/settings` to register (or re-identify) the client.
 /// Returns the client UUID assigned by the server.
-pub fn request_settings(host: &str, uuid: Option<&str>, debug: bool) -> Result<String> {
+pub fn request_settings(host: &str, uuid: Option<&str>, version: &str, debug: bool) -> Result<String> {
     let base = host.trim_end_matches('/');
     let url  = format!("{base}/RMBTControlServer/settings");
 
@@ -167,8 +167,8 @@ pub fn request_settings(host: &str, uuid: Option<&str>, debug: bool) -> Result<S
         uuid,
         language:                      "en",
         timezone:                      "UTC",
-        software_revision:             "_v0.9.3",
-        software_version_name:         "0.9",
+        software_revision:             version,
+        software_version_name:         version,
         terms_and_conditions_accepted: true,
     })?;
 
@@ -206,7 +206,7 @@ pub fn request_settings(host: &str, uuid: Option<&str>, debug: bool) -> Result<S
         .context("settings response contained no UUID")
 }
 
-pub fn request_test(host: &str, uuid: Option<&str>, use_ws: bool, debug: bool) -> Result<TestParams> {
+pub fn request_test(host: &str, uuid: Option<&str>, version: &str, use_ws: bool, debug: bool) -> Result<TestParams> {
     let base = host.trim_end_matches('/');
     let url  = format!("{base}/RMBTControlServer/testRequest");
 
@@ -228,8 +228,8 @@ pub fn request_test(host: &str, uuid: Option<&str>, use_ws: bool, debug: bool) -
         client:            client_id,
         version:           "0.9",
         client_type:       "DESKTOP",
-        software_version:  "0.9",
-        software_revision: "_v0.9.3",
+        software_version:  version,
+        software_revision: version,
         language:          "en",
         timezone:          "UTC",
         time:              now_ms,
