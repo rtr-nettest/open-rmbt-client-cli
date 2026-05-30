@@ -26,9 +26,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: rmbt-client-jar
-          path: |
-            clientJava/target/rmbt-client-*.jar
-            !clientJava/target/original-*.jar
+          path: clientJava/target/rmbt-client.jar
           retention-days: 90
 
   # ─────────────────────────────────────────────────────────────────────────────
