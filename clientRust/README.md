@@ -16,7 +16,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ## Build
 
 ```sh
-cd client
+cd clientRust
 cargo build --release
 ```
 
@@ -62,6 +62,46 @@ Skip TLS verification against a local test server:
 | `--debug` | Print raw control server request and response JSON |
 | `--intermediate` | Print intermediate upload throughput every 40 ms per thread |
 | `--help` | Print help |
+
+### JSON progress interface (desktop/GUI integration)
+
+These options make the client speak the machine-readable line protocol consumed
+by [`open-rmbt-desktop`](https://github.com/rtr-nettest/open-rmbt-desktop). The
+full contract is specified in [`../doc/json_interface.md`](../doc/json_interface.md).
+
+| Flag | Description |
+|------|-------------|
+| `-v`, `--verbose` | Emit machine-readable JSON progress messages on stdout (see below). Without it, only human-readable output is printed. |
+| `--nettype CODE` | Network-type code reported to the control server (default `98` = LAN) |
+| `--type TYPE` | Client type reported to the control server (default `CLI`) |
+| `--platform PLATFORM` | Platform label reported to the control server |
+| `--os OS` | Operating-system string (accepted for compatibility) |
+| `--osver VER` | Operating-system version (accepted for compatibility) |
+| `--model MODEL` | Device model reported to the control server |
+| `--set-version VER` | Override the reported client software version (`client_version`). Also accepted as `-set-version` (single dash) for desktop compatibility. |
+| `--user-loop-mode` | Accepted for compatibility; loop mode is not yet implemented (runs a single test) |
+| `--user-loop-mode-max-delay MIN` | Accepted for compatibility (ignored) |
+| `--user-loop-mode-test-counter N` | Accepted for compatibility (ignored) |
+| `--user-loop-mode-uuid UUID` | Accepted for compatibility (ignored) |
+
+When `-v` is set, the client prints one JSON object per line on stdout, bracketed
+by the plain-text sentinels `STARTING TEST.` and `ENDING TEST.`. Message `type`s:
+
+| `type` | Emitted | Key fields |
+|--------|---------|------------|
+| `UUID_INFO` | once the test is registered | `testUuid`, `openTestUuid`, `testToken` |
+| `STATE_CHANGE` | on every phase transition | `state` (`INIT`→`INIT_DOWN`→`PING`→`DOWN`→`INIT_UP`→`UP`→`SUBMITTING_RESULTS`→`END`), `time` |
+| `PING_RESULT` | per ping sample | `pingClient`/`pingServer` (**ms**), `pingTimeNs` (**ns**) |
+| `DOWNLOAD_RESULT` | ~every 250 ms during `DOWN` | `down` (**decimal Mbit/s**), `bytes` |
+| `UPLOAD_RESULT` | ~every 250 ms during `UP` | `up` (**decimal Mbit/s**), `bytes` |
+
+Example:
+
+```sh
+./target/release/rmbt-client -h measure.example.com \
+    --platform Windows_NT --os "Windows_NT, 10.0" --model Desktop_x64 \
+    --osver 10.0 --type DESKTOP --nettype 98 -set-version 2.0.1 -v
+```
 
 ## Protocol
 
