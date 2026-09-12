@@ -1,6 +1,30 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+/// POST `body` as JSON to `url`, returning the HTTP status code and the response
+/// body as a string.
+///
+/// The agent is configured with `http_status_as_error(false)` so that 4xx/5xx
+/// responses come back as `Ok` (with their body available) rather than as a
+/// transport error, letting callers report the server's error text.
+fn post_json(url: &str, body: &serde_json::Value) -> Result<(u16, String)> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .build()
+        .into();
+
+    let resp = agent
+        .post(url)
+        .send_json(body)
+        .with_context(|| format!("request to {url} failed"))?;
+    let status = resp.status().as_u16();
+    let text = resp
+        .into_body()
+        .read_to_string()
+        .context("failed to read response body")?;
+    Ok((status, text))
+}
+
 /// Parameters returned by the control server for a single test session.
 pub struct TestParams {
     pub token:          String,
@@ -177,17 +201,10 @@ pub fn request_settings(host: &str, uuid: Option<&str>, version: &str, debug: bo
         eprintln!("[debug] settings request body:\n{}", serde_json::to_string_pretty(&body)?);
     }
 
-    let raw: String = match ureq::post(&url)
-        .set("Content-Type", "application/json")
-        .send_json(body)
-    {
-        Ok(r)  => r.into_string().context("failed to read settings response")?,
-        Err(ureq::Error::Status(code, r)) => {
-            let body = r.into_string().unwrap_or_default();
-            bail!("settings request returned HTTP {code}: {}", body.trim());
-        }
-        Err(e) => bail!("settings request failed: {e}"),
-    };
+    let (code, raw) = post_json(&url, &body).context("settings request failed")?;
+    if code >= 400 {
+        bail!("settings request returned HTTP {code}: {}", raw.trim());
+    }
 
     if debug {
         let pretty = serde_json::from_str::<serde_json::Value>(&raw)
@@ -241,18 +258,11 @@ pub fn request_test(host: &str, uuid: Option<&str>, version: &str, use_ws: bool,
         eprintln!("[debug] request body:\n{}", serde_json::to_string_pretty(&body)?);
     }
 
-    let raw: String = match ureq::post(&url)
-        .set("Content-Type", "application/json")
-        .send_json(body)
-    {
-        Ok(r)  => r.into_string().context("failed to read control server response")?,
-        Err(ureq::Error::Status(code, r)) => {
-            let body = r.into_string().unwrap_or_default();
-            if debug { eprintln!("[debug] HTTP {code} response:\n{body}"); }
-            bail!("control server returned HTTP {code}: {}", body.trim());
-        }
-        Err(e) => bail!("control server request failed: {e}"),
-    };
+    let (code, raw) = post_json(&url, &body).context("control server request failed")?;
+    if code >= 400 {
+        if debug { eprintln!("[debug] HTTP {code} response:\n{raw}"); }
+        bail!("control server returned HTTP {code}: {}", raw.trim());
+    }
 
     if debug {
         let pretty = serde_json::from_str::<serde_json::Value>(&raw)
@@ -301,19 +311,12 @@ pub fn submit_result(host: &str, result: &TestResultSubmission, debug: bool) -> 
         eprintln!("[debug] result body:\n{}", serde_json::to_string_pretty(&body)?);
     }
 
-    match ureq::post(&url)
-        .set("Content-Type", "application/json")
-        .send_json(body)
-    {
-        Ok(r) => {
-            if debug {
-                let s = r.into_string().unwrap_or_default();
-                eprintln!("[debug] result response:\n{s}");
-            }
+    match post_json(&url, &body) {
+        Ok((code, resp)) if code < 400 => {
+            if debug { eprintln!("[debug] result response:\n{resp}"); }
         }
-        Err(ureq::Error::Status(code, r)) => {
-            let body = r.into_string().unwrap_or_default();
-            if debug { eprintln!("[debug] HTTP {code} response:\n{body}"); }
+        Ok((code, resp)) => {
+            if debug { eprintln!("[debug] HTTP {code} response:\n{resp}"); }
             eprintln!("Warning: result submission returned HTTP {code}");
         }
         Err(e) => {
