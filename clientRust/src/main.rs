@@ -1,5 +1,6 @@
 mod control;
 mod connection;
+mod gui;
 mod pretest;
 mod tests;
 mod uuid_store;
@@ -20,6 +21,12 @@ const VERSION_REVISION: &str = match option_env!("GIT_REVISION") { Some(v) => v,
 
 fn main() -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
+
+    // The desktop app passes the historic single-dash long flag `-set-version`.
+    // Normalize it to clap's `--set-version` before parsing (see doc/json_interface.md §4).
+    let argv: Vec<String> = std::env::args()
+        .map(|a| if a == "-set-version" { "--set-version".to_string() } else { a })
+        .collect();
 
     let matches = Command::new("rmbt-client")
         .about("RMBT network measurement client")
@@ -79,7 +86,33 @@ fn main() -> Result<()> {
                 .long("intermediate").action(ArgAction::SetTrue)
                 .help("Print intermediate upload throughput every 40 ms per thread"),
         )
-        .get_matches();
+        // ── open-rmbt-desktop JSON interface (doc/json_interface.md) ──────────
+        .arg(
+            Arg::new("verbose")
+                .short('v').long("verbose").action(ArgAction::SetTrue)
+                .help("Emit machine-readable JSON progress messages on stdout (GUI integration)"),
+        )
+        .arg(Arg::new("nettype").long("nettype").value_name("CODE")
+            .help("Network type code reported to the control server (default 98 = LAN)"))
+        .arg(Arg::new("type").long("type").value_name("TYPE")
+            .help("Client type reported to the control server (default CLI)"))
+        .arg(Arg::new("platform").long("platform").value_name("PLATFORM")
+            .help("Platform label reported to the control server"))
+        .arg(Arg::new("os").long("os").value_name("OS")
+            .help("Operating-system string (accepted for compatibility)"))
+        .arg(Arg::new("osver").long("osver").value_name("VER")
+            .help("Operating-system version (accepted for compatibility)"))
+        .arg(Arg::new("model").long("model").value_name("MODEL")
+            .help("Device model reported to the control server"))
+        .arg(Arg::new("set-version").long("set-version").value_name("VER")
+            .help("Override the reported client software version (client_version)"))
+        // Loop-mode flags: accepted for compatibility (single-run only for now).
+        .arg(Arg::new("user-loop-mode").long("user-loop-mode").action(ArgAction::SetTrue)
+            .help("Accepted for compatibility; loop mode is not yet implemented"))
+        .arg(Arg::new("user-loop-mode-max-delay").long("user-loop-mode-max-delay").value_name("MIN"))
+        .arg(Arg::new("user-loop-mode-test-counter").long("user-loop-mode-test-counter").value_name("N"))
+        .arg(Arg::new("user-loop-mode-uuid").long("user-loop-mode-uuid").value_name("UUID"))
+        .get_matches_from(argv);
 
     let raw_host      = matches.get_one::<String>("host").unwrap();
     let host_owned    = if raw_host.starts_with("http://") || raw_host.starts_with("https://") {
@@ -96,6 +129,26 @@ fn main() -> Result<()> {
     let no_tls_verify = matches.get_flag("no-tls-verify");
     let debug         = matches.get_flag("debug");
     let intermediate  = matches.get_flag("intermediate");
+
+    // JSON progress interface (open-rmbt-desktop). See doc/json_interface.md.
+    let verbose       = matches.get_flag("verbose");
+    gui::set_enabled(verbose);
+
+    // Metadata reported to the control server (from the desktop app or defaults).
+    let net_type      = matches.get_one::<String>("nettype")
+        .and_then(|s| s.parse::<u32>().ok()).unwrap_or(98);
+    let client_type   = matches.get_one::<String>("type").cloned().unwrap_or_else(|| "CLI".to_string());
+    let platform      = matches.get_one::<String>("platform").cloned().unwrap_or_else(|| "CLI".to_string());
+    let model         = matches.get_one::<String>("model").cloned().unwrap_or_else(|| MODEL.to_string());
+    let client_version = matches.get_one::<String>("set-version").cloned()
+        .unwrap_or_else(|| VERSION_FULL.to_string());
+
+    if matches.get_flag("user-loop-mode") {
+        eprintln!("Warning: --user-loop-mode is accepted but not yet implemented; running a single test.");
+    }
+
+    gui::starting_test();
+    gui::state_change("INIT");
 
     // Resolve client UUID:
     //   1. CLI --uuid flag takes priority (user-supplied, skip settings call)
@@ -117,6 +170,8 @@ fn main() -> Result<()> {
     // ── Step 1: request test parameters from the control server ──────────────
     println!("Contacting control server: {host}");
     let params = control::request_test(host, Some(uuid), VERSION_REVISION, VERSION_REVISION, force_ws, debug)?;
+
+    gui::uuid_info(params.test_uuid.as_deref(), params.open_test_uuid.as_deref(), &params.token);
 
     let preview_token = &params.token[..params.token.len().min(40)];
     println!("Token:    {preview_token}…");
@@ -149,6 +204,7 @@ fn main() -> Result<()> {
     let token    = Arc::new(params.token.clone());
 
     // ── Step 2: pre-test ──────────────────────────────────────────────────────
+    gui::state_change("INIT_DOWN");
     let pt = pretest::run_pretest(
         &params.server_addr, port, params.encryption, no_tls_verify, protocol,
         &params.token,
@@ -181,6 +237,7 @@ fn main() -> Result<()> {
         .as_millis() as u64;
 
     // ── Step 3: ping ──────────────────────────────────────────────────────────
+    gui::state_change("PING");
     println!("\nPing (1 s, 10–100 pings):");
     let (ping_results, server_version) = {
         let mut conn = connection::RmbtConn::connect(
@@ -194,18 +251,25 @@ fn main() -> Result<()> {
     };
 
     // ── Step 4: download ─────────────────────────────────────────────────────
+    gui::state_change("DOWN");
     println!("\nDownload ({dl_threads} thread(s), {duration}s):");
+    let dl_mon = gui::spawn_transfer_monitor(gui::Direction::Down, duration, params.open_test_uuid.clone());
     let dl_results = run_phase(
         dl_threads, &addr, port, params.encryption, no_tls_verify, protocol, &token,
         move |conn, tid| tests::run_download(conn, duration, dl_chunk_size, tid),
     )?;
+    dl_mon.stop();
 
     // ── Step 5: upload ───────────────────────────────────────────────────────
+    gui::state_change("INIT_UP");
+    gui::state_change("UP");
     println!("\nUpload ({ul_threads} thread(s), {duration}s):");
+    let ul_mon = gui::spawn_transfer_monitor(gui::Direction::Up, duration, params.open_test_uuid.clone());
     let ul_results = run_phase(
         ul_threads, &addr, port, params.encryption, no_tls_verify, protocol, &token,
         move |conn, tid| tests::run_upload(conn, duration, ul_chunk_size, tid, intermediate),
     )?;
+    ul_mon.stop();
 
     // ── Step 6: aggregate results ─────────────────────────────────────────────
     let dl_bytes: u64 = dl_results.iter().map(|r| r.bytes).sum();
@@ -274,12 +338,12 @@ fn main() -> Result<()> {
         client_language:         "en".into(),
         client_name,
         client_uuid:             Some(uuid.to_string()),
-        client_version:          VERSION_FULL.into(),
+        client_version:          client_version.clone(),
         client_software_version: server_version,
         geo_locations:           vec![],
-        model:                   MODEL.into(),
-        network_type:            98,
-        platform:                "CLI".into(),
+        model:                   model.clone(),
+        network_type:            net_type,
+        platform:                platform.clone(),
         product:                 "rmbt-client".into(),
         pings,
         test_bytes_download:     dl_bytes,
@@ -295,7 +359,7 @@ fn main() -> Result<()> {
         test_uuid:               params.test_uuid.clone(),
         time:                    test_begin_ms,
         timezone:                "UTC".into(),
-        client_type:             "CLI".into(),
+        client_type:             client_type.clone(),
         version_code:            "1".into(),
         speed_detail,
         user_server_selection:   false,
@@ -307,8 +371,12 @@ fn main() -> Result<()> {
         println!("Result:         https://www.netztest.at/share/{otu}");
     }
 
+    gui::state_change("SUBMITTING_RESULTS");
     println!("\nSubmitting results to control server…");
     control::submit_result(host, &result, debug)?;
+
+    gui::state_change("END");
+    gui::ending_test();
 
     Ok(())
 }

@@ -66,6 +66,7 @@ pub fn run_ping(
             client_ns as f64 / 1_000_000.0,
             server_ns as f64 / 1_000_000.0,
         );
+        crate::gui::ping_result(client_ns, server_ns, time_ns);
         results.push(PingResult { client_ns, server_ns, time_ns });
     }
 
@@ -104,6 +105,7 @@ pub fn run_download(
         conn.read_exact(&mut buf[..want])?;
         total    += want as u64;
         in_chunk -= want;
+        crate::gui::add_progress(want as u64);
 
         let now = Instant::now();
         if now.duration_since(last_sample) >= SAMPLE_INTERVAL {
@@ -182,6 +184,7 @@ pub fn run_upload(
             conn.write_bytes(&chunk[sent..sent + want])?;
             sent  += want;
             total += want as u64;
+            crate::gui::add_progress(want as u64);
 
             // Don't record samples on the terminal iteration — the authoritative
             // final entry (with server-reported time) is pushed after the loop.
