@@ -12,7 +12,11 @@ use std::thread;
 
 const MAX_THREADS: usize = 20;
 const MODEL:       &str  = "Client CLI Rust";
-const VERSION:     &str  = match option_env!("GIT_VERSION") { Some(v) => v, None => "dev" };
+/// Full `git describe` with commit hash (e.g. `v2.1-3-gc833667`), reported as `client_version`.
+const VERSION_FULL:     &str = match option_env!("GIT_VERSION_FULL") { Some(v) => v, None => "dev" };
+/// Full describe suffixed with branch (e.g. `v2.1-3-gc833667-master`), reported
+/// as `software_revision`, `software_version` and `software_version_name`.
+const VERSION_REVISION: &str = match option_env!("GIT_REVISION") { Some(v) => v, None => "dev" };
 
 fn main() -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -101,7 +105,7 @@ fn main() -> Result<()> {
         Some(s) => s.clone(),
         None => {
             let stored = uuid_store::load();
-            let uuid = control::request_settings(host, stored.as_deref(), VERSION, debug)?;
+            let uuid = control::request_settings(host, stored.as_deref(), VERSION_REVISION, VERSION_REVISION, debug)?;
             if stored.as_deref() != Some(uuid.as_str()) {
                 uuid_store::save(&uuid);
             }
@@ -112,7 +116,7 @@ fn main() -> Result<()> {
 
     // ── Step 1: request test parameters from the control server ──────────────
     println!("Contacting control server: {host}");
-    let params = control::request_test(host, Some(uuid), VERSION, force_ws, debug)?;
+    let params = control::request_test(host, Some(uuid), VERSION_REVISION, VERSION_REVISION, force_ws, debug)?;
 
     let preview_token = &params.token[..params.token.len().min(40)];
     println!("Token:    {preview_token}…");
@@ -270,8 +274,8 @@ fn main() -> Result<()> {
         client_language:         "en".into(),
         client_name,
         client_uuid:             Some(uuid.to_string()),
-        client_version:          VERSION.into(),
-        client_software_version: server_version.clone().unwrap_or_else(|| VERSION.into()),
+        client_version:          VERSION_FULL.into(),
+        client_software_version: server_version,
         geo_locations:           vec![],
         model:                   MODEL.into(),
         network_type:            98,

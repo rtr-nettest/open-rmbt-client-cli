@@ -145,7 +145,9 @@ pub struct TestResultSubmission {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_uuid:             Option<String>,
     pub client_version:          String,
-    pub client_software_version: String,
+    /// Version announced by the measurement server's greeting; `null` when the
+    /// server sent no version.
+    pub client_software_version: Option<String>,
     #[serde(rename = "geoLocations")]
     pub geo_locations:           Vec<serde_json::Value>,
     pub model:                   String,
@@ -181,7 +183,13 @@ pub struct TestResultSubmission {
 
 /// POST `{host}/RMBTControlServer/settings` to register (or re-identify) the client.
 /// Returns the client UUID assigned by the server.
-pub fn request_settings(host: &str, uuid: Option<&str>, version: &str, debug: bool) -> Result<String> {
+pub fn request_settings(
+    host:              &str,
+    uuid:              Option<&str>,
+    software_version:  &str,
+    software_revision: &str,
+    debug:             bool,
+) -> Result<String> {
     let base = host.trim_end_matches('/');
     let url  = format!("{base}/RMBTControlServer/settings");
 
@@ -191,8 +199,8 @@ pub fn request_settings(host: &str, uuid: Option<&str>, version: &str, debug: bo
         uuid,
         language:                      "en",
         timezone:                      "UTC",
-        software_revision:             version,
-        software_version_name:         version,
+        software_revision,
+        software_version_name:         software_version,
         terms_and_conditions_accepted: true,
     })?;
 
@@ -223,7 +231,14 @@ pub fn request_settings(host: &str, uuid: Option<&str>, version: &str, debug: bo
         .context("settings response contained no UUID")
 }
 
-pub fn request_test(host: &str, uuid: Option<&str>, version: &str, use_ws: bool, debug: bool) -> Result<TestParams> {
+pub fn request_test(
+    host:              &str,
+    uuid:              Option<&str>,
+    software_version:  &str,
+    software_revision: &str,
+    use_ws:            bool,
+    debug:             bool,
+) -> Result<TestParams> {
     let base = host.trim_end_matches('/');
     let url  = format!("{base}/RMBTControlServer/testRequest");
 
@@ -245,8 +260,8 @@ pub fn request_test(host: &str, uuid: Option<&str>, version: &str, use_ws: bool,
         client:            client_id,
         version:           "0.9",
         client_type:       "DESKTOP",
-        software_version:  version,
-        software_revision: version,
+        software_version,
+        software_revision,
         language:          "en",
         timezone:          "UTC",
         time:              now_ms,
