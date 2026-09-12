@@ -61,6 +61,9 @@ pub struct RmbtConn {
     pub chunk_size:     usize,
     pub chunk_size_min: usize,
     pub chunk_size_max: usize,
+    /// Server software version announced in the `RMBTv…` greeting line
+    /// (e.g. `"1.8.3"`), populated by `greeting()`.
+    pub server_version: Option<String>,
 }
 
 impl RmbtConn {
@@ -101,7 +104,13 @@ impl RmbtConn {
             }
         };
 
-        Ok(Self { inner, chunk_size: 4096, chunk_size_min: 1024, chunk_size_max: 4 * 1024 * 1024 })
+        Ok(Self {
+            inner,
+            chunk_size:     4096,
+            chunk_size_min: 1024,
+            chunk_size_max: 4 * 1024 * 1024,
+            server_version: None,
+        })
     }
 
     /// Perform the RMBT greeting:
@@ -109,9 +118,11 @@ impl RmbtConn {
     /// `CHUNKSIZE`.  Sets `self.chunk_size` from the server's announcement.
     pub fn greeting(&mut self, token: &str) -> Result<()> {
         let version = self.read_line()?;
-        if !version.trim_start_matches(|c: char| c == '\0' || c.is_whitespace()).starts_with("RMBTv") {
+        let greeting = version.trim_start_matches(|c: char| c == '\0' || c.is_whitespace());
+        let Some(server_version) = greeting.trim_end().strip_prefix("RMBTv") else {
             bail!("unexpected greeting: {version}");
-        }
+        };
+        self.server_version = Some(server_version.to_string());
 
         let accept = self.read_line()?;
         if !accept.contains("TOKEN") {

@@ -178,14 +178,15 @@ fn main() -> Result<()> {
 
     // ── Step 3: ping ──────────────────────────────────────────────────────────
     println!("\nPing (1 s, 10–100 pings):");
-    let ping_results = {
+    let (ping_results, server_version) = {
         let mut conn = connection::RmbtConn::connect(
             &addr, port, params.encryption, no_tls_verify, protocol,
         )?;
         conn.greeting(&token)?;
+        let server_version = conn.server_version.clone();
         let r = tests::run_ping(&mut conn, 1.0, 10, 100)?;
         conn.quit()?;
-        r
+        (r, server_version)
     };
 
     // ── Step 4: download ─────────────────────────────────────────────────────
@@ -270,7 +271,7 @@ fn main() -> Result<()> {
         client_name,
         client_uuid:             Some(uuid.to_string()),
         client_version:          VERSION.into(),
-        client_software_version: VERSION.into(),
+        client_software_version: server_version.clone().unwrap_or_else(|| VERSION.into()),
         geo_locations:           vec![],
         model:                   MODEL.into(),
         network_type:            98,
