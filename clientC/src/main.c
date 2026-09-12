@@ -313,11 +313,13 @@ int main(int argc, char *argv[])
     printf("\nPing (1 s, 10-100 pings):\n");
     PingResult ping_results[MAX_PINGS];
     int num_pings = 0;
+    char server_version[64] = "";
     {
         RmbtConn *conn = conn_connect(params.server_addr, port,
                                       params.encryption, no_tls_verify, protocol);
         if (!conn) return 1;
         if (conn_greeting(conn, params.token) < 0) { conn_free(conn); return 1; }
+        snprintf(server_version, sizeof(server_version), "%s", conn->server_version);
         num_pings = run_ping(conn, 1.0, 10, MAX_PINGS, ping_results, MAX_PINGS);
         conn_quit(conn);
         conn_free(conn);
@@ -430,8 +432,8 @@ int main(int argc, char *argv[])
     strcpy(result.client_name,
            protocol == PROTO_WS ? "RMBTws" : "RMBT");
     snprintf(result.client_uuid,            sizeof(result.client_uuid),            "%s", uuid_buf);
-    snprintf(result.client_version,         sizeof(result.client_version),         "%s", GIT_VERSION);
-    snprintf(result.client_software_version, sizeof(result.client_software_version), "%s", GIT_VERSION);
+    snprintf(result.client_version,         sizeof(result.client_version),         "%s", GIT_VERSION_FULL);
+    snprintf(result.client_software_version, sizeof(result.client_software_version), "%s", server_version);
     strcpy(result.model,                   "Client CLI C");
     result.network_type               = 98;
     strcpy(result.platform,                "CLI");

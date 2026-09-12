@@ -496,6 +496,8 @@ int conn_greeting(RmbtConn *c, const char *token)
         fprintf(stderr, "Unexpected greeting: %s\n", line);
         return -1;
     }
+    /* Record the announced server version (text after "RMBTv"). */
+    snprintf(c->server_version, sizeof(c->server_version), "%s", vp + 5);
 
     /* Server sends: ACCEPT TOKEN QUIT */
     if (conn_read_line(c, line, sizeof(line)) < 0) return -1;

@@ -164,8 +164,8 @@ int control_request_settings(const char *host, const char *uuid_in,
             "\"uuid\":\"%s\","
             "\"language\":\"en\","
             "\"timezone\":\"UTC\","
-            "\"softwareRevision\":\"" GIT_VERSION "\","
-            "\"softwareVersionName\":\"" GIT_VERSION "\","
+            "\"softwareRevision\":\"" GIT_REVISION "\","
+            "\"softwareVersionName\":\"" GIT_REVISION "\","
             "\"terms_and_conditions_accepted\":true"
             "}", uuid_in);
     } else {
@@ -175,8 +175,8 @@ int control_request_settings(const char *host, const char *uuid_in,
             "\"type\":\"DESKTOP\","
             "\"language\":\"en\","
             "\"timezone\":\"UTC\","
-            "\"softwareRevision\":\"" GIT_VERSION "\","
-            "\"softwareVersionName\":\"" GIT_VERSION "\","
+            "\"softwareRevision\":\"" GIT_REVISION "\","
+            "\"softwareVersionName\":\"" GIT_REVISION "\","
             "\"terms_and_conditions_accepted\":true"
             "}");
     }
@@ -276,8 +276,8 @@ int control_request_test(const char *host, const char *uuid,
             "\"client\":\"%s\","
             "\"version\":\"0.9\","
             "\"type\":\"DESKTOP\","
-            "\"softwareVersion\":\"" GIT_VERSION "\","
-            "\"softwareRevision\":\"" GIT_VERSION "\","
+            "\"softwareVersion\":\"" GIT_REVISION "\","
+            "\"softwareRevision\":\"" GIT_REVISION "\","
             "\"language\":\"en\","
             "\"timezone\":\"UTC\","
             "\"time\":%llu"
@@ -291,8 +291,8 @@ int control_request_test(const char *host, const char *uuid,
             "\"client\":\"%s\","
             "\"version\":\"0.9\","
             "\"type\":\"DESKTOP\","
-            "\"softwareVersion\":\"" GIT_VERSION "\","
-            "\"softwareRevision\":\"" GIT_VERSION "\","
+            "\"softwareVersion\":\"" GIT_REVISION "\","
+            "\"softwareRevision\":\"" GIT_REVISION "\","
             "\"language\":\"en\","
             "\"timezone\":\"UTC\","
             "\"time\":%llu"
@@ -368,6 +368,14 @@ int control_submit_result(const char *host,
     char *body = malloc(bsz);
     if (!body) return -1;
 
+    /* client_software_version is the server-announced version; emit JSON null
+     * when it is unknown (no greeting version recorded). */
+    char csv_frag[80];
+    if (r->client_software_version[0])
+        snprintf(csv_frag, sizeof(csv_frag), "\"%s\"", r->client_software_version);
+    else
+        snprintf(csv_frag, sizeof(csv_frag), "null");
+
     int pos = 0;
     pos += snprintf(body + pos, bsz - pos,
         "{"
@@ -375,7 +383,7 @@ int control_submit_result(const char *host,
         "\"client_name\":\"%s\","
         "\"client_uuid\":\"%s\","
         "\"client_version\":\"%s\","
-        "\"client_software_version\":\"%s\","
+        "\"client_software_version\":%s,"
         "\"geoLocations\":[],"
         "\"model\":\"%s\","
         "\"network_type\":%u,"
@@ -403,7 +411,7 @@ int control_submit_result(const char *host,
         r->client_name,
         r->client_uuid,
         r->client_version,
-        r->client_software_version,
+        csv_frag,
         r->model,
         r->network_type,
         r->platform,

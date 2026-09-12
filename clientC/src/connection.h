@@ -14,6 +14,9 @@ typedef struct {
     size_t   chunk_size;
     size_t   chunk_size_min;
     size_t   chunk_size_max;
+    /* Server version from the "RMBTv<version>" greeting (e.g. "1.8.3");
+     * empty until conn_greeting() succeeds. */
+    char     server_version[64];
     /* single-byte read-ahead buffer for line reading */
     unsigned char peek;
     int           peek_valid;
