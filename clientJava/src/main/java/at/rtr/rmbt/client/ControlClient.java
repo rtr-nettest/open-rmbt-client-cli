@@ -23,12 +23,12 @@ final class ControlClient {
 
     private final String  host;
     private final boolean debug;
-    private final String  version;
+    private final String  revision;
 
-    ControlClient(String host, boolean debug, String version) {
-        this.host    = host.stripTrailing().replaceAll("/+$", "");
-        this.debug   = debug;
-        this.version = version;
+    ControlClient(String host, boolean debug, String revision) {
+        this.host     = host.stripTrailing().replaceAll("/+$", "");
+        this.debug    = debug;
+        this.revision = revision;
     }
 
     // ── /settings ─────────────────────────────────────────────────────────────
@@ -44,8 +44,8 @@ final class ControlClient {
         body.put("type",     "DESKTOP");
         body.put("language", "en");
         body.put("timezone", "UTC");
-        body.put("softwareRevision",    version);
-        body.put("softwareVersionName", version);
+        body.put("softwareRevision",    revision);
+        body.put("softwareVersionName", revision);
         body.put("terms_and_conditions_accepted", true);
         if (storedUuid != null) body.put("uuid", storedUuid);
 
@@ -68,8 +68,8 @@ final class ControlClient {
         body.put("client",           useWs ? "RMBTws" : "RMBT");
         body.put("version",          "0.9");
         body.put("type",             "DESKTOP");
-        body.put("softwareVersion",  version);
-        body.put("softwareRevision", version);
+        body.put("softwareVersion",  revision);
+        body.put("softwareRevision", revision);
         body.put("language",         "en");
         body.put("timezone",         "UTC");
         body.put("time",             Instant.now().toEpochMilli());
@@ -139,7 +139,8 @@ final class ControlClient {
     }
 
     static ObjectNode buildResult(
-            String clientUuid, String clientName, String version, TestParams params, int port,
+            String clientUuid, String clientName, String clientVersion, String serverVersion,
+            TestParams params, int port,
             PingResult[] pings, TransferResult[] dlResults, TransferResult[] ulResults) {
 
         long dlBytes = 0, dlNs = 0, ulBytes = 0, ulNs = 0;
@@ -157,8 +158,9 @@ final class ControlClient {
         r.put("client_language",         "en");
         r.put("client_name",             clientName);
         r.put("client_uuid",             clientUuid);
-        r.put("client_version",          version);
-        r.put("client_software_version", version);
+        r.put("client_version",          clientVersion);
+        // Version reported by the measurement server's greeting; null → JSON null.
+        r.put("client_software_version", serverVersion);
         r.putArray("geoLocations");
         r.put("model",          "Client CLI Java");
         r.put("network_type",   98);

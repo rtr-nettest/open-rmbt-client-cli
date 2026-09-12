@@ -38,25 +38,44 @@
                         <goals><goal>run</goal></goals>
                         <configuration>
                             <target>
-                                <!-- Capture "v1.0-5-gabcdef"; Java strips the hash at load time -->
+                                <!-- Full describe with commit hash, e.g. "v2.1-4-ged32b3d" — client_version -->
                                 <exec executable="git"
-                                      outputproperty="git.describe"
-                                      resultproperty="git.result"
+                                      outputproperty="git.describe.full"
+                                      resultproperty="git.result.full"
                                       failonerror="false"
                                       dir="${project.basedir}">
                                     <arg value="describe"/>
                                     <arg value="--tags"/>
-                                    <arg value="--long"/>
                                     <arg value="--always"/>
                                 </exec>
-                                <condition property="git.version"
-                                           value="${git.describe}"
+                                <!-- Current branch, e.g. "dev" — suffixed onto the revision string -->
+                                <exec executable="git"
+                                      outputproperty="git.branch"
+                                      resultproperty="git.branch.result"
+                                      failonerror="false"
+                                      dir="${project.basedir}">
+                                    <arg value="rev-parse"/>
+                                    <arg value="--abbrev-ref"/>
+                                    <arg value="HEAD"/>
+                                </exec>
+                                <condition property="git.version.full"
+                                           value="${git.describe.full}"
                                            else="dev">
-                                    <equals arg1="${git.result}" arg2="0"/>
+                                    <equals arg1="${git.result.full}" arg2="0"/>
+                                </condition>
+                                <!-- Full describe suffixed with branch, e.g. "v2.1-4-ged32b3d-dev";
+                                     if the branch is unknown, no suffix is added. -->
+                                <condition property="git.revision"
+                                           value="${git.version.full}-${git.branch}"
+                                           else="${git.version.full}">
+                                    <and>
+                                        <equals arg1="${git.branch.result}" arg2="0"/>
+                                        <length string="${git.branch}" trim="true" when="greater" length="0"/>
+                                    </and>
                                 </condition>
                                 <mkdir dir="${project.build.outputDirectory}"/>
                                 <echo file="${project.build.outputDirectory}/version.properties"
-                                      message="version=${git.version}"/>
+                                      message="version.full=${git.version.full}${line.separator}version.revision=${git.revision}${line.separator}"/>
                             </target>
                         </configuration>
                     </execution>

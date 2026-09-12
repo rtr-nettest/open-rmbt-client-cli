@@ -6,21 +6,18 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public final class Main {
 
-    private static final int    MAX_THREADS = 20;
-    private static final String VERSION     = loadVersion();
+    private static final int    MAX_THREADS      = 20;
+    /** Full describe with commit hash (e.g. "v2.1-4-ged32b3d"), reported as client_version. */
+    private static final String VERSION_FULL     = loadVersionProp("version.full");
+    /** Full describe plus branch (e.g. "v2.1-4-ged32b3d-dev"), reported as softwareVersion/Name/Revision. */
+    private static final String VERSION_REVISION = loadVersionProp("version.revision");
 
-    private static String loadVersion() {
+    private static String loadVersionProp(String key) {
         try (var is = Main.class.getResourceAsStream("/version.properties")) {
             if (is == null) return "dev";
             var props = new java.util.Properties();
             props.load(is);
-            String raw = props.getProperty("version", "dev").trim();
-            // Strip "-g<abbrev>" suffix: "v1.0-5-gabcdef" → "v1.0-5"
-            int i = raw.lastIndexOf('-');
-            if (i > 0 && i + 1 < raw.length() && raw.charAt(i + 1) == 'g') {
-                return raw.substring(0, i);
-            }
-            return raw;
+            return props.getProperty(key, "dev").trim();
         } catch (Exception e) {
             return "dev";
         }
@@ -66,7 +63,7 @@ public final class Main {
         if (!host.startsWith("http://") && !host.startsWith("https://"))
             host = "https://" + host;
 
-        ControlClient control = new ControlClient(host, debug, VERSION);
+        ControlClient control = new ControlClient(host, debug, VERSION_REVISION);
 
         // ── UUID: /settings flow ──────────────────────────────────────────────
         String uuid;
@@ -132,9 +129,11 @@ public final class Main {
         // ── Step 3: ping ──────────────────────────────────────────────────────
         System.out.println("\nPing (1 s, 10-100 pings):");
         List<PingResult> pings;
+        String serverVersion;
         try (RmbtConn conn = RmbtConn.connect(
                 params.serverAddr(), port, params.encryption(), noTlsVerify, protocol)) {
             conn.greeting(params.token());
+            serverVersion = conn.serverVersion;
             pings = Tests.runPing(conn, 1.0, 10, 100);
             conn.quit();
         }
@@ -181,7 +180,7 @@ public final class Main {
         // ── Step 7: submit ────────────────────────────────────────────────────
         String clientName = protocol == RmbtConn.PROTO_WS ? "RMBTws" : "RMBT";
         var resultNode = ControlClient.buildResult(
-                uuid, clientName, VERSION, params, port,
+                uuid, clientName, VERSION_FULL, serverVersion, params, port,
                 pings.toArray(PingResult[]::new),
                 dlResults.toArray(TransferResult[]::new),
                 ulResults.toArray(TransferResult[]::new));

@@ -31,6 +31,9 @@ final class RmbtConn implements Closeable {
     int chunkSizeMin = 1024;
     int chunkSizeMax = 4 * 1024 * 1024;
 
+    /** Server software version from the {@code RMBTv…} greeting (e.g. "1.8.3"); null until greeting(). */
+    String serverVersion;
+
     // ── Connect + upgrade ──────────────────────────────────────────────────────
 
     static RmbtConn connect(String host, int port, boolean useTls,
@@ -73,6 +76,7 @@ final class RmbtConn implements Closeable {
         String version = readLine().replaceAll("^[\\x00\\s]+", "");
         if (!version.startsWith("RMBTv"))
             throw new IOException("Unexpected greeting: " + version);
+        serverVersion = version.substring("RMBTv".length()).trim();
 
         String accept = readLine();
         if (!accept.contains("TOKEN"))
