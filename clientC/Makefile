@@ -27,6 +27,7 @@ LDFLAGS = $(shell pkg-config --libs libcurl openssl 2>/dev/null || echo "-lcurl 
 SRCS = src/main.c \
        src/control.c \
        src/connection.c \
+       src/gui.c \
        src/pretest.c \
        src/tests.c \
        src/uuid_store.c

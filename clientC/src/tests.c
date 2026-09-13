@@ -1,5 +1,6 @@
 #include "tests.h"
 #include "connection.h"
+#include "gui.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -68,6 +69,7 @@ int run_ping(RmbtConn *conn, double duration_secs,
 
         printf("  ping  client=%.3fms  server=%.3fms\n",
                client_ns / 1e6, server_ns / 1e6);
+        gui_ping_result(client_ns, server_ns, time_ns);
 
         results[count].client_ns = client_ns;
         results[count].server_ns = server_ns;
@@ -125,6 +127,7 @@ int run_download(RmbtConn *conn, uint32_t duration_secs,
         }
         total    += want;
         in_chunk -= want;
+        gui_add_progress(want);
 
         uint64_t now = now_ns();
         if (now - last_sample >= SAMPLE_INTERVAL_NS) {
@@ -233,6 +236,7 @@ int run_upload(RmbtConn *conn, uint32_t duration_secs,
             }
             sent  += want;
             total += want;
+            gui_add_progress(want);
 
             if (!terminal) {
                 uint64_t now = now_ns();
