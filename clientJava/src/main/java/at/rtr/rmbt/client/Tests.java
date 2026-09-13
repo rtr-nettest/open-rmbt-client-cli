@@ -49,6 +49,7 @@ final class Tests {
 
             System.out.printf("  ping  client=%.3fms  server=%.3fms%n",
                     clientNs / 1e6, serverNs / 1e6);
+            Gui.pingResult(clientNs, serverNs, timeNs);
             results.add(new PingResult(clientNs, serverNs, timeNs));
         }
         return results;
@@ -73,6 +74,7 @@ final class Tests {
         for (;;) {
             conn.readExact(buf);
             total += chunkSize;
+            Gui.addProgress(chunkSize);
 
             long now = System.nanoTime();
             if (now - lastSample >= SAMPLE_INTERVAL_NS) {
@@ -129,6 +131,7 @@ final class Tests {
             chunk[chunkSize - 1] = terminal ? (byte)0xFF : 0x00;
             conn.writeBytes(chunk);
             total += chunkSize;
+            Gui.addProgress(chunkSize);
 
             // Don't record a sample on the terminal iteration — the authoritative
             // final entry (with server-reported time) is always pushed after the loop.

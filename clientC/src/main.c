@@ -12,6 +12,7 @@
 
 #include "connection.h"
 #include "control.h"
+#include "gui.h"
 #include "pretest.h"
 #include "tests.h"
 #include "uuid_store.h"
@@ -151,6 +152,14 @@ static void print_usage(const char *prog)
         "      --no-tls-verify     Skip TLS certificate verification\n"
         "      --debug             Print control server JSON\n"
         "      --intermediate      Print upload throughput every 40 ms per thread\n"
+        "  -v, --verbose           Emit machine-readable JSON progress on stdout (GUI)\n"
+        "      --nettype CODE      Network type code (default 98 = LAN)\n"
+        "      --type TYPE         Client type (default DESKTOP)\n"
+        "      --platform NAME     Platform label\n"
+        "      --os/--osver STR    Accepted for compatibility\n"
+        "      --model NAME        Device model\n"
+        "      --set-version VER   Override reported client_version\n"
+        "      --user-loop-mode... Accepted for compatibility (single run)\n"
         "      --help              Print this help\n",
         prog);
 }
@@ -174,6 +183,25 @@ int main(int argc, char *argv[])
     int         no_tls_verify = 0;
     int         debug        = 0;
     int         intermediate = 0;
+    /* JSON progress interface (open-rmbt-desktop). See doc/json_interface.md. */
+    int         verbose      = 0;
+    int         net_type     = 98;
+    const char *client_type  = "DESKTOP";
+    const char *platform_s   = "CLI";
+    const char *model_s      = "Client CLI C";
+    const char *set_version  = NULL;
+
+    /* The desktop app passes the historic single-dash long flag `-set-version`.
+     * Normalize it to `--set-version` so getopt_long recognizes it. */
+    for (int i = 1; i < argc; i++)
+        if (strcmp(argv[i], "-set-version") == 0)
+            argv[i] = (char *)"--set-version";
+
+    enum {
+        OPT_NETTYPE = 1000, OPT_TYPE, OPT_PLATFORM, OPT_OS, OPT_OSVER,
+        OPT_MODEL, OPT_SET_VERSION, OPT_LOOP, OPT_LOOP_DELAY,
+        OPT_LOOP_COUNTER, OPT_LOOP_UUID
+    };
 
     static struct option long_opts[] = {
         {"host",          required_argument, NULL, 'h'},
@@ -186,12 +214,24 @@ int main(int argc, char *argv[])
         {"no-tls-verify", no_argument,       NULL, 'n'},
         {"debug",         no_argument,       NULL, 'D'},
         {"intermediate",  no_argument,       NULL, 'i'},
+        {"verbose",       no_argument,       NULL, 'v'},
+        {"nettype",       required_argument, NULL, OPT_NETTYPE},
+        {"type",          required_argument, NULL, OPT_TYPE},
+        {"platform",      required_argument, NULL, OPT_PLATFORM},
+        {"os",            required_argument, NULL, OPT_OS},
+        {"osver",         required_argument, NULL, OPT_OSVER},
+        {"model",         required_argument, NULL, OPT_MODEL},
+        {"set-version",   required_argument, NULL, OPT_SET_VERSION},
+        {"user-loop-mode",              no_argument,       NULL, OPT_LOOP},
+        {"user-loop-mode-max-delay",    required_argument, NULL, OPT_LOOP_DELAY},
+        {"user-loop-mode-test-counter", required_argument, NULL, OPT_LOOP_COUNTER},
+        {"user-loop-mode-uuid",         required_argument, NULL, OPT_LOOP_UUID},
         {"help",          no_argument,       NULL, '?'},
         {NULL, 0, NULL, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "h:p:u:t:d:", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "h:p:u:t:d:v", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'h': host        = optarg;           break;
         case 'p': port_ovr    = atoi(optarg);     break;
@@ -203,6 +243,15 @@ int main(int argc, char *argv[])
         case 'n': no_tls_verify = 1;              break;
         case 'D': debug       = 1;                break;
         case 'i': intermediate = 1;               break;
+        case 'v': verbose     = 1;                break;
+        case OPT_NETTYPE:     net_type    = atoi(optarg); break;
+        case OPT_TYPE:        client_type = optarg;       break;
+        case OPT_PLATFORM:    platform_s  = optarg;       break;
+        case OPT_MODEL:       model_s     = optarg;       break;
+        case OPT_SET_VERSION: set_version = optarg;       break;
+        case OPT_OS: case OPT_OSVER:                      break; /* accepted, unused */
+        case OPT_LOOP: case OPT_LOOP_DELAY:
+        case OPT_LOOP_COUNTER: case OPT_LOOP_UUID:        break; /* accepted; loop not implemented */
         case '?': print_usage(argv[0]); return 0;
         default:  print_usage(argv[0]); return 1;
         }
@@ -220,6 +269,10 @@ int main(int argc, char *argv[])
         snprintf(host_buf, sizeof(host_buf), "https://%s", host);
         host = host_buf;
     }
+
+    gui_set_enabled(verbose);
+    gui_starting_test();
+    gui_state_change("INIT");
 
     /*
      * Resolve UUID:
@@ -250,6 +303,8 @@ int main(int argc, char *argv[])
     TestParams params;
     if (control_request_test(host, uuid_buf, force_ws, debug, &params) < 0)
         return 1;
+
+    gui_uuid_info(params.test_uuid, params.open_test_uuid, params.token);
 
     /* Show token preview */
     char token_preview[44] = "";
@@ -284,6 +339,7 @@ int main(int argc, char *argv[])
                           ? (int)params.num_threads : MAX_THREADS;
 
     /* ── Step 2: pre-test ────────────────────────────────────────────────────── */
+    gui_state_change("INIT_DOWN");
     PretestResult pt;
     if (run_pretest(params.server_addr, port, params.encryption, no_tls_verify,
                     protocol, params.token, server_cap, &pt) < 0)
@@ -310,6 +366,7 @@ int main(int argc, char *argv[])
     uint64_t test_begin_ms = now_ms_wall();
 
     /* ── Step 3: ping ────────────────────────────────────────────────────────── */
+    gui_state_change("PING");
     printf("\nPing (1 s, 10-100 pings):\n");
     PingResult ping_results[MAX_PINGS];
     int num_pings = 0;
@@ -327,23 +384,30 @@ int main(int argc, char *argv[])
     if (num_pings < 0) { fprintf(stderr, "Ping phase failed\n"); return 1; }
 
     /* ── Step 4: download ────────────────────────────────────────────────────── */
+    gui_state_change("DOWN");
     printf("\nDownload (%d thread(s), %us):\n", dl_threads, duration);
     TransferResult dl_results[MAX_THREADS];
     int num_dl = 0;
+    GuiMonitor *dl_mon = gui_monitor_start(0, duration, params.open_test_uuid);
     run_phase(dl_threads, params.server_addr, port, params.encryption,
               no_tls_verify, protocol, params.token,
               duration, dl_chunk_size, 0, PHASE_DOWNLOAD,
               dl_results, &num_dl);
+    gui_monitor_stop(dl_mon);
     if (num_dl == 0) { fprintf(stderr, "All download threads failed\n"); return 1; }
 
     /* ── Step 5: upload ──────────────────────────────────────────────────────── */
+    gui_state_change("INIT_UP");
+    gui_state_change("UP");
     printf("\nUpload (%d thread(s), %us):\n", ul_threads, duration);
     TransferResult ul_results[MAX_THREADS];
     int num_ul = 0;
+    GuiMonitor *ul_mon = gui_monitor_start(1, duration, params.open_test_uuid);
     run_phase(ul_threads, params.server_addr, port, params.encryption,
               no_tls_verify, protocol, params.token,
               duration, ul_chunk_size, intermediate, PHASE_UPLOAD,
               ul_results, &num_ul);
+    gui_monitor_stop(ul_mon);
     if (num_ul == 0) { fprintf(stderr, "All upload threads failed\n"); return 1; }
 
     /* ── Step 6: aggregate ───────────────────────────────────────────────────── */
@@ -432,11 +496,11 @@ int main(int argc, char *argv[])
     strcpy(result.client_name,
            protocol == PROTO_WS ? "RMBTws" : "RMBT");
     snprintf(result.client_uuid,            sizeof(result.client_uuid),            "%s", uuid_buf);
-    snprintf(result.client_version,         sizeof(result.client_version),         "%s", GIT_VERSION_FULL);
+    snprintf(result.client_version,         sizeof(result.client_version),         "%s", set_version ? set_version : GIT_VERSION_FULL);
     snprintf(result.client_software_version, sizeof(result.client_software_version), "%s", server_version);
-    strcpy(result.model,                   "Client CLI C");
-    result.network_type               = 98;
-    strcpy(result.platform,                "CLI");
+    snprintf(result.model,    sizeof(result.model),    "%s", model_s);
+    result.network_type               = (uint32_t)net_type;
+    snprintf(result.platform, sizeof(result.platform), "%s", platform_s);
     strcpy(result.product,                 "rmbt-client-c");
     result.pings                      = ping_items;
     result.num_pings                  = num_pings;
@@ -453,7 +517,7 @@ int main(int argc, char *argv[])
     snprintf(result.test_uuid,  sizeof(result.test_uuid),  "%s", params.test_uuid);
     result.time_ms                    = test_begin_ms;
     strcpy(result.timezone,            "UTC");
-    strcpy(result.client_type,         "DESKTOP");
+    snprintf(result.client_type, sizeof(result.client_type), "%s", client_type);
     strcpy(result.version_code,        "1");
     result.speed_detail               = sd;
     result.num_speed_detail           = num_sd;
@@ -464,8 +528,12 @@ int main(int argc, char *argv[])
     if (params.open_test_uuid[0])
         printf("Result:         https://www.netztest.at/share/%s\n", params.open_test_uuid);
 
+    gui_state_change("SUBMITTING_RESULTS");
     printf("\nSubmitting results to control server...\n");
     control_submit_result(host, &result, debug);
+
+    gui_state_change("END");
+    gui_ending_test();
 
     for (int i = 0; i < num_dl; i++) free(dl_results[i].samples);
     for (int i = 0; i < num_ul; i++) free(ul_results[i].samples);
