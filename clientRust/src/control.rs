@@ -148,7 +148,8 @@ pub struct TestResultSubmission {
     /// (e.g. `"1.8.3"`); falls back to this client's own version when the
     /// server sent none.
     pub client_version:          String,
-    /// This client software's own version (`git describe`).
+    /// This client software's own version plus language/arch,
+    /// e.g. `2.2.1-5-g410aa11 (Rust/aarch64)`.
     pub client_software_version: Option<String>,
     #[serde(rename = "geoLocations")]
     pub geo_locations:           Vec<serde_json::Value>,

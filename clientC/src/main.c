@@ -20,6 +20,19 @@
 #define MAX_THREADS 20
 #define MAX_PINGS   100
 
+/* Compile-time CPU architecture label for client_software_version. */
+#if defined(__aarch64__) || defined(__arm64__)
+#  define CLIENT_ARCH "aarch64"
+#elif defined(__x86_64__) || defined(__amd64__)
+#  define CLIENT_ARCH "x86_64"
+#elif defined(__i386__)
+#  define CLIENT_ARCH "x86"
+#elif defined(__arm__)
+#  define CLIENT_ARCH "arm"
+#else
+#  define CLIENT_ARCH "unknown"
+#endif
+
 /* ── Thread arguments / results ─────────────────────────────────────────────── */
 
 typedef enum { PHASE_DOWNLOAD, PHASE_UPLOAD } Phase;
@@ -501,7 +514,14 @@ int main(int argc, char *argv[])
        client_software_version = this client's own version. */
     snprintf(result.client_version,          sizeof(result.client_version),          "%s",
              server_version[0] ? server_version : GIT_VERSION_FULL);
-    snprintf(result.client_software_version, sizeof(result.client_software_version), "%s", GIT_VERSION_FULL);
+    /* client_software_version = own version (leading 'v' stripped) plus language/arch,
+       e.g. "2.2.1-5-g410aa11 (C/aarch64)". */
+    {
+        const char *ver = GIT_VERSION_FULL;
+        if (ver[0] == 'v') ver++;   /* strip leading 'v' */
+        snprintf(result.client_software_version, sizeof(result.client_software_version),
+                 "%s (C/%s)", ver, CLIENT_ARCH);
+    }
     snprintf(result.model,    sizeof(result.model),    "%s", model_s);
     /* device: set from --set-version as "App: <version>" (the wrapping app); empty when unset. */
     if (set_version && set_version[0])

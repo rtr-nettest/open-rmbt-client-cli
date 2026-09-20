@@ -341,7 +341,13 @@ fn main() -> Result<()> {
         client_name,
         client_uuid:             Some(uuid.to_string()),
         client_version:          server_version.unwrap_or_else(|| VERSION_FULL.into()),
-        client_software_version: Some(VERSION_FULL.into()),
+        // Own version (leading 'v' stripped) plus language/arch,
+        // e.g. "2.2.1-5-g410aa11 (Rust/aarch64)".
+        client_software_version: Some(format!(
+            "{} (Rust/{})",
+            VERSION_FULL.strip_prefix('v').unwrap_or(VERSION_FULL),
+            std::env::consts::ARCH,
+        )),
         geo_locations:           vec![],
         model:                   model.clone(),
         device,
