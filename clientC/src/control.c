@@ -368,8 +368,8 @@ int control_submit_result(const char *host,
     char *body = malloc(bsz);
     if (!body) return -1;
 
-    /* client_software_version is the server-announced version; emit JSON null
-     * when it is unknown (no greeting version recorded). */
+    /* client_software_version carries this client's own version and is normally
+     * always set; emit JSON null only in the defensive empty case. */
     char csv_frag[80];
     if (r->client_software_version[0])
         snprintf(csv_frag, sizeof(csv_frag), "\"%s\"", r->client_software_version);

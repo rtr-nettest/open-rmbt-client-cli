@@ -144,9 +144,11 @@ pub struct TestResultSubmission {
     pub client_name:             String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_uuid:             Option<String>,
+    /// Version announced by the measurement (RMBT) server's greeting
+    /// (e.g. `"1.8.3"`); falls back to this client's own version when the
+    /// server sent none.
     pub client_version:          String,
-    /// Version announced by the measurement server's greeting; `null` when the
-    /// server sent no version.
+    /// This client software's own version (`git describe`, or `--set-version`).
     pub client_software_version: Option<String>,
     #[serde(rename = "geoLocations")]
     pub geo_locations:           Vec<serde_json::Value>,

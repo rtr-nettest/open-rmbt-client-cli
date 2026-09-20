@@ -432,8 +432,12 @@ int main(int argc, char *argv[])
     strcpy(result.client_name,
            protocol == PROTO_WS ? "RMBTws" : "RMBT");
     snprintf(result.client_uuid,            sizeof(result.client_uuid),            "%s", uuid_buf);
-    snprintf(result.client_version,         sizeof(result.client_version),         "%s", GIT_VERSION_FULL);
-    snprintf(result.client_software_version, sizeof(result.client_software_version), "%s", server_version);
+    /* client_version = RMBT measurement-server version (falls back to this
+       client's own version when the server announced none);
+       client_software_version = this client's own version. */
+    snprintf(result.client_version,          sizeof(result.client_version),          "%s",
+             server_version[0] ? server_version : GIT_VERSION_FULL);
+    snprintf(result.client_software_version, sizeof(result.client_software_version), "%s", GIT_VERSION_FULL);
     strcpy(result.model,                   "Client CLI C");
     result.network_type               = 98;
     strcpy(result.platform,                "CLI");

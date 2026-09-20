@@ -158,9 +158,11 @@ final class ControlClient {
         r.put("client_language",         "en");
         r.put("client_name",             clientName);
         r.put("client_uuid",             clientUuid);
-        r.put("client_version",          clientVersion);
-        // Version reported by the measurement server's greeting; null → JSON null.
-        r.put("client_software_version", serverVersion);
+        // client_version = the measurement server's announced version (falls back
+        // to this client's own version when the server sent none).
+        r.put("client_version",          serverVersion != null ? serverVersion : clientVersion);
+        // client_software_version = this client's own version.
+        r.put("client_software_version", clientVersion);
         r.putArray("geoLocations");
         r.put("model",          "Client CLI Java");
         r.put("network_type",   98);
