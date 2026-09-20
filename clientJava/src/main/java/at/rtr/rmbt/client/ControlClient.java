@@ -161,8 +161,11 @@ final class ControlClient {
         // client_version = the measurement server's announced version (falls back
         // to this client's own version when the server sent none).
         r.put("client_version",          serverVersion != null ? serverVersion : clientVersion);
-        // client_software_version = this client's own version.
-        r.put("client_software_version", clientVersion);
+        // client_software_version = this client's own version (leading 'v' stripped)
+        // plus language/arch, e.g. "2.2.1-5-g410aa11 (Java/aarch64)".
+        String swVersion = (clientVersion.startsWith("v") ? clientVersion.substring(1) : clientVersion)
+                + " (Java/" + System.getProperty("os.arch") + ")";
+        r.put("client_software_version", swVersion);
         r.putArray("geoLocations");
         r.put("model",          "Client CLI Java");
         // device: set from --set-version as "App: <version>" (the wrapping app); omitted when unset.

@@ -33,7 +33,7 @@ typedef struct {
     char        client_name[32];
     char        client_uuid[64];
     char        client_version[32];
-    char        client_software_version[32];
+    char        client_software_version[64];
     char        model[32];
     char        device[64];
     uint32_t    network_type;
