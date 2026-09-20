@@ -223,10 +223,14 @@ jobs:
         include:
           - os: ubuntu-latest
             name: linux-x64
+          - os: ubuntu-24.04-arm
+            name: linux-arm64
           - os: macos-latest
             name: macos-arm64
           - os: windows-latest
             name: windows-x64
+          - os: windows-11-arm
+            name: windows-arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -351,7 +355,9 @@ jobs:
             release-assets/c-linux-arm64/*.zip
             release-assets/c-macos-arm64/*.zip
             release-assets/java-linux-x64/*.zip
+            release-assets/java-linux-arm64/*.zip
             release-assets/java-macos-arm64/*.zip
             release-assets/java-windows-x64/*.zip
+            release-assets/java-windows-arm64/*.zip
             release-assets/source/*.zip
           token: ${{ secrets.GITHUB_TOKEN }}
