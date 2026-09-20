@@ -19,7 +19,16 @@ const VERSION_FULL:     &str = match option_env!("GIT_VERSION_FULL") { Some(v) =
 /// as `software_revision`, `software_version` and `software_version_name`.
 const VERSION_REVISION: &str = match option_env!("GIT_REVISION") { Some(v) => v, None => "dev" };
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(e) = run() {
+        // Failure paths carry a clear, single-line message (e.g.
+        // "token rejected by server: ERR"); print that, not a backtrace.
+        eprintln!("Error: {e:#}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     // The desktop app passes the historic single-dash long flag `-set-version`.
