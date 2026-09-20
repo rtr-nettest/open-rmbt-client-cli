@@ -231,6 +231,8 @@ jobs:
             name: windows-x64
           - os: windows-11-arm
             name: windows-arm64
+            # Temurin has no Windows/AArch64 build of JDK 25; Zulu does.
+            distribution: zulu
 
     steps:
       - uses: actions/checkout@v4
@@ -240,7 +242,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           java-version: '25'
-          distribution: 'temurin'
+          distribution: ${{ matrix.distribution || 'temurin' }}
 
       - name: Download JAR
         uses: actions/download-artifact@v4
