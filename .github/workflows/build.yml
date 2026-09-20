@@ -129,103 +129,85 @@ jobs:
           retention-days: 90
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # C client: Linux x64 (native), Linux arm64 (QEMU Docker), macOS arm64 (native)
-  # Windows is not supported: the C client uses POSIX socket APIs (sys/socket.h,
-  # netdb.h, etc.) that have no Windows equivalent without major refactoring.
-  # macOS x64 is not built separately: the arm64 binary runs on Intel Macs via Rosetta.
+  # C client — every variant in one job (per-matrix runs-on, like the rust job):
+  #   • linux-x64 / linux-arm64  — dynamically linked (glibc, system libcurl+OpenSSL)
+  #   • macos-arm64              — dynamically linked (Homebrew curl + openssl@3)
+  # Windows is unsupported: the C client uses POSIX socket APIs (sys/socket.h,
+  # netdb.h, …) with no Windows equivalent without major refactoring.
+  # macOS x64 is not built separately: the arm64 binary runs on Intel via Rosetta.
   # ─────────────────────────────────────────────────────────────────────────────
   c:
     name: C / ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: linux-x64
-            docker_platform: ""
+            os: ubuntu-latest
+            build: linux-native
           - name: linux-arm64
+            os: ubuntu-latest
+            build: linux-docker
             docker_platform: linux/arm64
           - name: macos-arm64
-            docker_platform: ""
+            os: macos-latest
+            build: macos-native
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # ── macOS arm64 — runs on a separate macOS runner ──────────────────────
-      # We can't run macOS in Docker, so we special-case it with a conditional.
-      # GitHub does not allow per-matrix `runs-on`, so we gate the macOS build
-      # here and skip it on the Linux runner.
+      # QEMU lets the x64 runner execute arm64 containers.
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.docker_platform == 'linux/arm64'
 
-      # ── Linux x64 native ──────────────────────────────────────────────────
-      - name: Install deps (Linux x64)
-        if: matrix.name == 'linux-x64'
+      # ── Linux x64 — native, dynamically linked ─────────────────────────────
+      - name: Install deps (Linux native)
+        if: matrix.build == 'linux-native'
         run: sudo apt-get install -y libcurl4-openssl-dev libssl-dev
 
-      - name: Build (Linux x64)
-        if: matrix.name == 'linux-x64'
+      - name: Build (Linux native)
+        if: matrix.build == 'linux-native'
         run: make -C clientC
 
-      # ── Linux arm64 via QEMU Docker (avoids fragile apt multiarch) ─────────
-      - uses: docker/setup-qemu-action@v3
-        if: matrix.name == 'linux-arm64'
-
+      # ── Linux arm64 — dynamically linked, built in an Ubuntu container ─────
       - name: Build (Linux arm64 in Docker)
-        if: matrix.name == 'linux-arm64'
+        if: matrix.build == 'linux-docker'
         run: |
-          docker run --rm --platform linux/arm64 \
-            -v "$GITHUB_WORKSPACE:/workspace" \
-            -w /workspace \
+          docker run --rm --platform ${{ matrix.docker_platform }} \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
             ubuntu:latest \
             bash -c "
               apt-get update -qq &&
               apt-get install -y git gcc make libcurl4-openssl-dev libssl-dev &&
+              git config --global --add safe.directory /workspace &&
               make -C clientC
             "
 
-      # ── Package ────────────────────────────────────────────────────────────
-      - name: Package (Linux)
-        if: matrix.name == 'linux-x64' || matrix.name == 'linux-arm64'
+      # ── macOS arm64 — native, dynamically linked (Homebrew) ────────────────
+      - name: Install deps (macOS)
+        if: matrix.build == 'macos-native'
+        run: brew install curl openssl@3 pkg-config
+
+      - name: Build (macOS)
+        if: matrix.build == 'macos-native'
+        run: |
+          export PKG_CONFIG_PATH="$(brew --prefix curl)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig"
+          make -C clientC
+
+      # ── Package + upload (identical for every variant) ─────────────────────
+      - name: Package
         run: |
           mkdir -p dist
           cp clientC/build/rmbt-client dist/
           cd dist && zip rmbt-client-c-${{ matrix.name }}.zip rmbt-client
 
       - uses: actions/upload-artifact@v4
-        if: matrix.name == 'linux-x64' || matrix.name == 'linux-arm64'
         with:
           name: c-${{ matrix.name }}
           path: dist/rmbt-client-c-${{ matrix.name }}.zip
-          retention-days: 90
-
-  # macOS C build runs on its own job (matrix runs-on workaround)
-  c-macos:
-    name: C / macos-arm64
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install deps
-        run: brew install curl openssl@3 pkg-config
-
-      - name: Build
-        run: |
-          export PKG_CONFIG_PATH="$(brew --prefix curl)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig"
-          make -C clientC
-
-      - name: Package
-        run: |
-          mkdir -p dist
-          cp clientC/build/rmbt-client dist/
-          cd dist && zip rmbt-client-c-macos-arm64.zip rmbt-client
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: c-macos-arm64
-          path: dist/rmbt-client-c-macos-arm64.zip
           retention-days: 90
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -342,7 +324,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   release:
     runs-on: ubuntu-latest
-    needs: [java-jar, rust, c, c-macos, java-native, source-zip]
+    needs: [java-jar, rust, c, java-native, source-zip]
     if: github.ref_type == 'tag'
     permissions:
       contents: write
