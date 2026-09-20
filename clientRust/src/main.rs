@@ -105,7 +105,7 @@ fn main() -> Result<()> {
         .arg(Arg::new("model").long("model").value_name("MODEL")
             .help("Device model reported to the control server"))
         .arg(Arg::new("set-version").long("set-version").value_name("VER")
-            .help("Override the reported client software version (client_version)"))
+            .help("Wrapping app version; reported as the 'device' field prefixed with \"App: \""))
         // Loop-mode flags: accepted for compatibility (single-run only for now).
         .arg(Arg::new("user-loop-mode").long("user-loop-mode").action(ArgAction::SetTrue)
             .help("Accepted for compatibility; loop mode is not yet implemented"))
@@ -140,8 +140,10 @@ fn main() -> Result<()> {
     let client_type   = matches.get_one::<String>("type").cloned().unwrap_or_else(|| "CLI".to_string());
     let platform      = matches.get_one::<String>("platform").cloned().unwrap_or_else(|| "CLI".to_string());
     let model         = matches.get_one::<String>("model").cloned().unwrap_or_else(|| MODEL.to_string());
-    let client_version = matches.get_one::<String>("set-version").cloned()
-        .unwrap_or_else(|| VERSION_FULL.to_string());
+    // --set-version (desktop-app compat) is reported as the `device` field,
+    // prefixed with "App: "; it does not affect the version fields.
+    let device        = matches.get_one::<String>("set-version").cloned()
+        .map(|v| format!("App: {v}"));
 
     if matches.get_flag("user-loop-mode") {
         eprintln!("Warning: --user-loop-mode is accepted but not yet implemented; running a single test.");
@@ -338,10 +340,11 @@ fn main() -> Result<()> {
         client_language:         "en".into(),
         client_name,
         client_uuid:             Some(uuid.to_string()),
-        client_version:          client_version.clone(),
-        client_software_version: server_version,
+        client_version:          server_version.unwrap_or_else(|| VERSION_FULL.into()),
+        client_software_version: Some(VERSION_FULL.into()),
         geo_locations:           vec![],
         model:                   model.clone(),
+        device,
         network_type:            net_type,
         platform:                platform.clone(),
         product:                 "rmbt-client".into(),

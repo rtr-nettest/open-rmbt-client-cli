@@ -206,7 +206,7 @@ sends. Argument vector the app sends, in order:
 | `--osver` | `24.1.0` | OS version (result `os_version`). |
 | `--type` | `DESKTOP` | Client type. |
 | `--nettype` | `98` | Network type code (result `network_type`; default **98** = LAN). |
-| `-set-version` | `4.1.0` | Reported client software version. |
+| `-set-version` | `4.1.0` | Wrapping app version; reported as result `device`, prefixed `App: ` (→ `"App: 4.1.0"`). |
 | `-v` | *(flag)* | Enable the JSON interface (§1.4). |
 | `-u` | `<uuid>` | Client UUID; omitted on first run → obtained from the server. |
 

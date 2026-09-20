@@ -78,7 +78,7 @@ full contract is specified in [`../doc/json_interface.md`](../doc/json_interface
 | `--os OS` | Operating-system string (accepted for compatibility) |
 | `--osver VER` | Operating-system version (accepted for compatibility) |
 | `--model MODEL` | Device model reported to the control server |
-| `--set-version VER` | Override the reported client software version (`client_version`). Also accepted as `-set-version` (single dash) for desktop compatibility. |
+| `--set-version VER` | Wrapping app version; reported as the `device` field prefixed with `App: ` (e.g. `--set-version 4.1.0` → `device` = `"App: 4.1.0"`). Does **not** affect the version fields. Also accepted as `-set-version` (single dash) for desktop compatibility. |
 | `--user-loop-mode` | Accepted for compatibility; loop mode is not yet implemented (runs a single test) |
 | `--user-loop-mode-max-delay MIN` | Accepted for compatibility (ignored) |
 | `--user-loop-mode-test-counter N` | Accepted for compatibility (ignored) |

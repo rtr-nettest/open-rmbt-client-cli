@@ -144,13 +144,19 @@ pub struct TestResultSubmission {
     pub client_name:             String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_uuid:             Option<String>,
+    /// Version announced by the measurement (RMBT) server's greeting
+    /// (e.g. `"1.8.3"`); falls back to this client's own version when the
+    /// server sent none.
     pub client_version:          String,
-    /// Version announced by the measurement server's greeting; `null` when the
-    /// server sent no version.
+    /// This client software's own version (`git describe`).
     pub client_software_version: Option<String>,
     #[serde(rename = "geoLocations")]
     pub geo_locations:           Vec<serde_json::Value>,
     pub model:                   String,
+    /// Device identifier. When `--set-version` is given, reported as
+    /// `"App: <version>"` (the wrapping app's version). Omitted when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device:                  Option<String>,
     pub network_type:            u32,
     pub platform:                String,
     pub product:                 String,

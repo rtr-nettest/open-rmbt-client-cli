@@ -41,7 +41,7 @@ public final class Main {
         String  clientType   = "DESKTOP";
         String  platform     = "CLI";
         String  model        = "Client CLI Java";
-        String  setVersion   = null;
+        String  device       = null;
 
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -61,7 +61,9 @@ public final class Main {
             else if ("--platform".equals(a))                       platform     = args[++i];
             else if ("--model".equals(a))                          model        = args[++i];
             else if ("--os".equals(a) || "--osver".equals(a))      i++; // accepted for compatibility
-            else if ("-set-version".equals(a) || "--set-version".equals(a)) setVersion = args[++i];
+            // Wrapping app version (desktop-app compat, also single-dash);
+            // reported as the `device` field prefixed with "App: ".
+            else if ("-set-version".equals(a) || "--set-version".equals(a)) device = "App: " + args[++i];
             else if ("--user-loop-mode".equals(a))                 { /* accepted; not implemented */ }
             else if ("--user-loop-mode-max-delay".equals(a)
                   || "--user-loop-mode-test-counter".equals(a)
@@ -214,8 +216,7 @@ public final class Main {
         Gui.stateChange("SUBMITTING_RESULTS");
         String clientName = protocol == RmbtConn.PROTO_WS ? "RMBTws" : "RMBT";
         var resultNode = ControlClient.buildResult(
-                uuid, clientName, setVersion != null ? setVersion : VERSION_FULL,
-                serverVersion, params, port,
+                uuid, clientName, VERSION_FULL, serverVersion, device, params, port,
                 pings.toArray(PingResult[]::new),
                 dlResults.toArray(TransferResult[]::new),
                 ulResults.toArray(TransferResult[]::new));
@@ -298,7 +299,7 @@ public final class Main {
                   --platform NAME     Platform label
                   --os / --osver STR  Accepted for compatibility
                   --model NAME        Device model
-                  --set-version VER   Override reported client_version
+                  --set-version VER   Wrapping app version; reported as device = "App: VER"
                   --user-loop-mode... Accepted for compatibility (single run)
                   --help              Print this help
             """);
