@@ -151,6 +151,7 @@ static void print_usage(const char *prog)
         "      --no-tls-verify     Skip TLS certificate verification\n"
         "      --debug             Print control server JSON\n"
         "      --intermediate      Print upload throughput every 40 ms per thread\n"
+        "      --set-version VER   Wrapping app version; reported as device = \"App: VER\"\n"
         "      --help              Print this help\n",
         prog);
 }
@@ -174,6 +175,12 @@ int main(int argc, char *argv[])
     int         no_tls_verify = 0;
     int         debug        = 0;
     int         intermediate = 0;
+    const char *app_version  = NULL;
+
+    /* The desktop app passes the historic single-dash long flag `-set-version`;
+       normalize it to `--set-version` so getopt_long recognizes it. */
+    for (int i = 1; i < argc; i++)
+        if (strcmp(argv[i], "-set-version") == 0) argv[i] = (char *)"--set-version";
 
     static struct option long_opts[] = {
         {"host",          required_argument, NULL, 'h'},
@@ -186,6 +193,7 @@ int main(int argc, char *argv[])
         {"no-tls-verify", no_argument,       NULL, 'n'},
         {"debug",         no_argument,       NULL, 'D'},
         {"intermediate",  no_argument,       NULL, 'i'},
+        {"set-version",   required_argument, NULL, 'V'},
         {"help",          no_argument,       NULL, '?'},
         {NULL, 0, NULL, 0}
     };
@@ -203,6 +211,7 @@ int main(int argc, char *argv[])
         case 'n': no_tls_verify = 1;              break;
         case 'D': debug       = 1;                break;
         case 'i': intermediate = 1;               break;
+        case 'V': app_version  = optarg;          break;
         case '?': print_usage(argv[0]); return 0;
         default:  print_usage(argv[0]); return 1;
         }
@@ -439,6 +448,9 @@ int main(int argc, char *argv[])
              server_version[0] ? server_version : GIT_VERSION_FULL);
     snprintf(result.client_software_version, sizeof(result.client_software_version), "%s", GIT_VERSION_FULL);
     strcpy(result.model,                   "Client CLI C");
+    /* device: set from --set-version as "App: <version>" (the wrapping app); empty when unset. */
+    if (app_version && app_version[0])
+        snprintf(result.device, sizeof(result.device), "App: %s", app_version);
     result.network_type               = 98;
     strcpy(result.platform,                "CLI");
     strcpy(result.product,                 "rmbt-client-c");

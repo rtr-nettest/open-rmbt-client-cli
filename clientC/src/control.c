@@ -376,6 +376,13 @@ int control_submit_result(const char *host,
     else
         snprintf(csv_frag, sizeof(csv_frag), "null");
 
+    /* device: emitted only when set (e.g. from --set-version as "App: <ver>"). */
+    char device_frag[80];
+    if (r->device[0])
+        snprintf(device_frag, sizeof(device_frag), "\"device\":\"%s\",", r->device);
+    else
+        device_frag[0] = '\0';
+
     int pos = 0;
     pos += snprintf(body + pos, bsz - pos,
         "{"
@@ -386,6 +393,7 @@ int control_submit_result(const char *host,
         "\"client_software_version\":%s,"
         "\"geoLocations\":[],"
         "\"model\":\"%s\","
+        "%s"
         "\"network_type\":%u,"
         "\"platform\":\"%s\","
         "\"product\":\"%s\","
@@ -413,6 +421,7 @@ int control_submit_result(const char *host,
         r->client_version,
         csv_frag,
         r->model,
+        device_frag,
         r->network_type,
         r->platform,
         r->product,

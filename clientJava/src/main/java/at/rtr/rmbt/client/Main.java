@@ -35,6 +35,7 @@ public final class Main {
         boolean noTlsVerify  = false;
         boolean debug        = false;
         boolean intermediate = false;
+        String  device       = null;
 
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -49,6 +50,9 @@ public final class Main {
             else if ("--debug".equals(a))                          debug        = true;
             else if ("--intermediate".equals(a))                   intermediate = true;
             else if ("--help".equals(a))                           { printUsage(); return; }
+            // Wrapping app version (desktop-app compat, also single-dash);
+            // reported as the `device` field prefixed with "App: ".
+            else if ("--set-version".equals(a) || "-set-version".equals(a)) device = "App: " + args[++i];
             else if (a.startsWith("-")) {
                 System.err.println("Unknown option: " + a);
                 printUsage();
@@ -180,7 +184,7 @@ public final class Main {
         // ── Step 7: submit ────────────────────────────────────────────────────
         String clientName = protocol == RmbtConn.PROTO_WS ? "RMBTws" : "RMBT";
         var resultNode = ControlClient.buildResult(
-                uuid, clientName, VERSION_FULL, serverVersion, params, port,
+                uuid, clientName, VERSION_FULL, serverVersion, device, params, port,
                 pings.toArray(PingResult[]::new),
                 dlResults.toArray(TransferResult[]::new),
                 ulResults.toArray(TransferResult[]::new));
@@ -249,6 +253,7 @@ public final class Main {
                   --no-tls-verify     Skip TLS certificate verification
                   --debug             Print control server JSON
                   --intermediate      Print upload throughput every 40 ms per thread
+                  --set-version VER   Wrapping app version; reported as device = "App: VER"
                   --help              Print this help
             """);
     }

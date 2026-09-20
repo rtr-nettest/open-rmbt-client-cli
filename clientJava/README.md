@@ -49,6 +49,7 @@ java -jar target/rmbt-client-0.9.0.jar --host https://localhost:8080 --no-tls-ve
 | `--no-tls-verify` | Skip TLS certificate verification (insecure) |
 | `--debug` | Print control server request/response JSON |
 | `--intermediate` | Print upload throughput every 40 ms per thread |
+| `--set-version VER` | Wrapping app version; reported as the `device` field prefixed with `App: ` (e.g. `--set-version 4.1.0` → `device` = `"App: 4.1.0"`). Also accepted as `-set-version` (single dash) for desktop compatibility. |
 | `--help` | Print help |
 
 ## Protocol
