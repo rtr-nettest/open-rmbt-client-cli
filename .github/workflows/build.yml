@@ -60,6 +60,10 @@ jobs:
             target: x86_64-pc-windows-msvc
             name: windows-x64
             use_cross: false
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            name: windows-arm64
+            use_cross: false
 
     steps:
       - uses: actions/checkout@v4
@@ -360,6 +364,7 @@ jobs:
             release-assets/rust-macos-arm64/*.zip
             release-assets/rust-macos-x64/*.zip
             release-assets/rust-windows-x64/*.zip
+            release-assets/rust-windows-arm64/*.zip
             release-assets/c-linux-x64/*.zip
             release-assets/c-linux-arm64/*.zip
             release-assets/c-macos-arm64/*.zip
