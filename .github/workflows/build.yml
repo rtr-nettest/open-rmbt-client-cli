@@ -87,13 +87,24 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # ring (via rustls) compiles some C, so the *-pc-windows-gnu build needs a
-      # MinGW gcc on PATH (rustup only ships the linker/libs for the gnu target).
-      - name: Install MinGW-w64 (Windows GNU target)
+      # ring (via rustls) compiles some C, so the x86_64-pc-windows-gnu build
+      # needs a MinGW-w64 gcc on PATH. Use MSYS2's MINGW64 environment, which is
+      # msvcrt-flavoured to match the gnu target. (The egor-tensin action is
+      # unmaintained and fails on current UCRT-flavoured mingw packages.)
+      - name: Set up MSYS2 / MinGW-w64 (Windows GNU target)
         if: matrix.windows_gnu == true
-        uses: egor-tensin/setup-mingw@v2
+        id: msys2
+        uses: msys2/setup-msys2@v2
         with:
-          platform: x64
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc
+          path-type: inherit
+      - name: Put MinGW-w64 on PATH (Windows GNU target)
+        if: matrix.windows_gnu == true
+        shell: pwsh
+        run: |
+          "${{ steps.msys2.outputs.msys2-location }}\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - uses: actions/cache@v4
         with:
