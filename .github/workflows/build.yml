@@ -202,7 +202,9 @@ jobs:
       # ── Linux x64 — native, dynamically linked ─────────────────────────────
       - name: Install deps (Linux native)
         if: matrix.build == 'linux-native'
-        run: sudo apt-get install -y libcurl4-openssl-dev libssl-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev libssl-dev
 
       - name: Build (Linux native)
         if: matrix.build == 'linux-native'
