@@ -30,7 +30,8 @@ jobs:
           retention-days: 90
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Rust: static musl for Linux; native/cross for macOS; MSVC for Windows
+  # Rust: static musl for Linux; native/cross for macOS; Windows x64 = GNU +
+  # static CRT (no MSVC redistributable), Windows arm64 = MSVC + static CRT
   # macos-latest is now Apple Silicon (arm64); x64 cross-compiles cleanly via Rust.
   # ─────────────────────────────────────────────────────────────────────────────
   rust:
@@ -56,14 +57,26 @@ jobs:
             target: x86_64-apple-darwin
             name: macos-x64
             use_cross: false
+          # Windows x64: GNU (MinGW) toolchain + static CRT, so the binary links
+          # only against OS-provided DLLs (msvcrt.dll) and never the MSVC
+          # redistributable — no VCRUNTIME140.dll dependency, nothing to ship.
+          # Fixes STATUS_DLL_NOT_FOUND (0xC0000135) on machines without the
+          # VC++ runtime.
           - os: windows-latest
-            target: x86_64-pc-windows-msvc
+            target: x86_64-pc-windows-gnu
             name: windows-x64
             use_cross: false
+            windows_gnu: true
+            rustflags: "-C target-feature=+crt-static"
+          # Windows arm64: no usable *-pc-windows-gnu Rust target exists, so keep
+          # MSVC but statically link the CRT (+crt-static) — the runtime is baked
+          # into the exe, so again there is no VCRUNTIME140.dll dependency and
+          # nothing is shipped separately.
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
             name: windows-arm64
             use_cross: false
+            rustflags: "-C target-feature=+crt-static"
 
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +86,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      # ring (via rustls) compiles some C, so the *-pc-windows-gnu build needs a
+      # MinGW gcc on PATH (rustup only ships the linker/libs for the gnu target).
+      - name: Install MinGW-w64 (Windows GNU target)
+        if: matrix.windows_gnu == true
+        uses: egor-tensin/setup-mingw@v2
+        with:
+          platform: x64
 
       - uses: actions/cache@v4
         with:
@@ -101,6 +122,10 @@ jobs:
 
       - name: Build (native)
         if: matrix.use_cross == false
+        env:
+          # Empty for non-Windows targets; "+crt-static" for the Windows builds
+          # so the runtime is linked in and no VC++ redistributable is required.
+          RUSTFLAGS: ${{ matrix.rustflags }}
         run: cargo build --release --target ${{ matrix.target }} --manifest-path clientRust/Cargo.toml
 
       - name: Build (cross — Docker-based)
