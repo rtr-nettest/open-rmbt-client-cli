@@ -74,7 +74,8 @@ int control_request_settings(const char *host, const char *uuid_in,
 
 /* Returns 0 on success. */
 int control_request_test(const char *host, const char *uuid,
-                         int use_ws, int debug, TestParams *out);
+                         int use_ws, const char *prefer_server,
+                         int debug, TestParams *out);
 
 int control_submit_result(const char *host,
                           const TestResultSubmission *r, int debug);

@@ -113,6 +113,8 @@ fn run() -> Result<()> {
             .help("Operating-system version (accepted for compatibility)"))
         .arg(Arg::new("model").long("model").value_name("MODEL")
             .help("Device model reported to the control server"))
+        .arg(Arg::new("server_uuid").long("server_uuid").value_name("UUID")
+            .help("Preferred measurement-server UUID; sent as prefer_server (server auto-assigned if omitted)"))
         .arg(Arg::new("set-version").long("set-version").value_name("VER")
             .help("Wrapping app version; reported as the 'device' field prefixed with \"App: \""))
         // Loop-mode flags: accepted for compatibility (single-run only for now).
@@ -153,6 +155,9 @@ fn run() -> Result<()> {
     // prefixed with "App: "; it does not affect the version fields.
     let device        = matches.get_one::<String>("set-version").cloned()
         .map(|v| format!("App: {v}"));
+    // Optional preferred test server chosen by the user; forwarded to the
+    // control server as prefer_server (+ user_server_selection).
+    let server_uuid   = matches.get_one::<String>("server_uuid").map(|s| s.as_str());
 
     if matches.get_flag("user-loop-mode") {
         eprintln!("Warning: --user-loop-mode is accepted but not yet implemented; running a single test.");
@@ -180,7 +185,7 @@ fn run() -> Result<()> {
 
     // ── Step 1: request test parameters from the control server ──────────────
     println!("Contacting control server: {host}");
-    let params = control::request_test(host, Some(uuid), VERSION_REVISION, VERSION_REVISION, force_ws, debug)?;
+    let params = control::request_test(host, Some(uuid), VERSION_REVISION, VERSION_REVISION, force_ws, server_uuid, debug)?;
 
     gui::uuid_info(params.test_uuid.as_deref(), params.open_test_uuid.as_deref(), &params.token);
 
@@ -380,7 +385,7 @@ fn run() -> Result<()> {
         client_type:             client_type.clone(),
         version_code:            "1".into(),
         speed_detail,
-        user_server_selection:   false,
+        user_server_selection:   server_uuid.is_some(),
         test_status:             "0".into(),
         test_port_remote:        Some(port),
     };

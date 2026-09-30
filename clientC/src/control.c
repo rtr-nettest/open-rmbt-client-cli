@@ -252,7 +252,8 @@ int control_request_settings(const char *host, const char *uuid_in,
 /* ── Public: request test ────────────────────────────────────────────────────── */
 
 int control_request_test(const char *host, const char *uuid,
-                         int use_ws, int debug, TestParams *out)
+                         int use_ws, const char *prefer_server,
+                         int debug, TestParams *out)
 {
     char url[512];
     const char *base = host;
@@ -268,6 +269,14 @@ int control_request_test(const char *host, const char *uuid,
     const char *client_id = use_ws ? "RMBTws" : "RMBT";
     uint64_t ts = now_ms();
 
+    /* Optional user server selection: request a specific measurement server. */
+    char server_frag[128] = "";
+    if (prefer_server && *prefer_server) {
+        snprintf(server_frag, sizeof(server_frag),
+                 ",\"prefer_server\":\"%s\",\"user_server_selection\":true",
+                 prefer_server);
+    }
+
     char body[1024];
     if (uuid && *uuid) {
         snprintf(body, sizeof(body),
@@ -282,8 +291,9 @@ int control_request_test(const char *host, const char *uuid,
             "\"timezone\":\"UTC\","
             "\"time\":%llu"
             "%s"
+            "%s"
             "}",
-            uuid, client_id, (unsigned long long)ts,
+            uuid, client_id, (unsigned long long)ts, server_frag,
             use_ws ? "" : ",\"capabilities\":{\"RMBThttp\":true}");
     } else {
         snprintf(body, sizeof(body),
@@ -297,8 +307,9 @@ int control_request_test(const char *host, const char *uuid,
             "\"timezone\":\"UTC\","
             "\"time\":%llu"
             "%s"
+            "%s"
             "}",
-            client_id, (unsigned long long)ts,
+            client_id, (unsigned long long)ts, server_frag,
             use_ws ? "" : ",\"capabilities\":{\"RMBThttp\":true}");
     }
 

@@ -42,6 +42,7 @@ public final class Main {
         String  platform     = "CLI";
         String  model        = "Client CLI Java";
         String  device       = null;
+        String  serverUuid   = null;
 
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -60,6 +61,7 @@ public final class Main {
             else if ("--type".equals(a))                           clientType   = args[++i];
             else if ("--platform".equals(a))                       platform     = args[++i];
             else if ("--model".equals(a))                          model        = args[++i];
+            else if ("--server_uuid".equals(a))                    serverUuid   = args[++i];
             else if ("--os".equals(a) || "--osver".equals(a))      i++; // accepted for compatibility
             // Wrapping app version (desktop-app compat, also single-dash);
             // reported as the `device` field prefixed with "App: ".
@@ -105,7 +107,7 @@ public final class Main {
                      : RmbtConn.PROTO_HTTP; // resolved again after params
 
         System.out.println("Contacting control server: " + host);
-        TestParams params = control.requestTest(uuid, forceWs);
+        TestParams params = control.requestTest(uuid, forceWs, serverUuid);
 
         Gui.uuidInfo(params.testUuid(), params.openTestUuid(), params.token());
 
@@ -226,6 +228,7 @@ public final class Main {
         resultNode.put("type", clientType);
         resultNode.put("platform", platform);
         resultNode.put("model", model);
+        resultNode.put("user_server_selection", serverUuid != null && !serverUuid.isEmpty());
 
         if (params.openTestUuid() != null)
             System.out.println("Result:         https://www.netztest.at/share/" + params.openTestUuid());
@@ -299,6 +302,7 @@ public final class Main {
                   --platform NAME     Platform label
                   --os / --osver STR  Accepted for compatibility
                   --model NAME        Device model
+                  --server_uuid UUID  Preferred measurement-server UUID (prefer_server)
                   --set-version VER   Wrapping app version; reported as device = "App: VER"
                   --user-loop-mode... Accepted for compatibility (single run)
                   --help              Print this help

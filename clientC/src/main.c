@@ -171,6 +171,7 @@ static void print_usage(const char *prog)
         "      --platform NAME     Platform label\n"
         "      --os/--osver STR    Accepted for compatibility\n"
         "      --model NAME        Device model\n"
+        "      --server_uuid UUID  Preferred measurement-server UUID (prefer_server)\n"
         "      --set-version VER   Wrapping app version; reported as device = \"App: VER\"\n"
         "      --user-loop-mode... Accepted for compatibility (single run)\n"
         "      --help              Print this help\n",
@@ -203,6 +204,7 @@ int main(int argc, char *argv[])
     const char *platform_s   = "CLI";
     const char *model_s      = "Client CLI C";
     const char *set_version  = NULL;
+    const char *server_uuid  = NULL;
 
     /* The desktop app passes the historic single-dash long flag `-set-version`.
      * Normalize it to `--set-version` so getopt_long recognizes it. */
@@ -212,7 +214,7 @@ int main(int argc, char *argv[])
 
     enum {
         OPT_NETTYPE = 1000, OPT_TYPE, OPT_PLATFORM, OPT_OS, OPT_OSVER,
-        OPT_MODEL, OPT_SET_VERSION, OPT_LOOP, OPT_LOOP_DELAY,
+        OPT_MODEL, OPT_SET_VERSION, OPT_SERVER_UUID, OPT_LOOP, OPT_LOOP_DELAY,
         OPT_LOOP_COUNTER, OPT_LOOP_UUID
     };
 
@@ -234,6 +236,7 @@ int main(int argc, char *argv[])
         {"os",            required_argument, NULL, OPT_OS},
         {"osver",         required_argument, NULL, OPT_OSVER},
         {"model",         required_argument, NULL, OPT_MODEL},
+        {"server_uuid",   required_argument, NULL, OPT_SERVER_UUID},
         {"set-version",   required_argument, NULL, OPT_SET_VERSION},
         {"user-loop-mode",              no_argument,       NULL, OPT_LOOP},
         {"user-loop-mode-max-delay",    required_argument, NULL, OPT_LOOP_DELAY},
@@ -262,6 +265,7 @@ int main(int argc, char *argv[])
         case OPT_PLATFORM:    platform_s  = optarg;       break;
         case OPT_MODEL:       model_s     = optarg;       break;
         case OPT_SET_VERSION: set_version = optarg;       break;
+        case OPT_SERVER_UUID: server_uuid = optarg;       break;
         case OPT_OS: case OPT_OSVER:                      break; /* accepted, unused */
         case OPT_LOOP: case OPT_LOOP_DELAY:
         case OPT_LOOP_COUNTER: case OPT_LOOP_UUID:        break; /* accepted; loop not implemented */
@@ -314,7 +318,7 @@ int main(int argc, char *argv[])
     /* ── Step 1: control server ──────────────────────────────────────────────── */
     printf("Contacting control server: %s\n", host);
     TestParams params;
-    if (control_request_test(host, uuid_buf, force_ws, debug, &params) < 0)
+    if (control_request_test(host, uuid_buf, force_ws, server_uuid, debug, &params) < 0)
         return 1;
 
     gui_uuid_info(params.test_uuid, params.open_test_uuid, params.token);
@@ -548,7 +552,7 @@ int main(int argc, char *argv[])
     strcpy(result.version_code,        "1");
     result.speed_detail               = sd;
     result.num_speed_detail           = num_sd;
-    result.user_server_selection      = 0;
+    result.user_server_selection      = (server_uuid && *server_uuid) ? 1 : 0;
     strcpy(result.test_status,         "0");
     result.test_port_remote           = port;
 

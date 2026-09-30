@@ -62,7 +62,7 @@ final class ControlClient {
 
     // ── /testRequest ──────────────────────────────────────────────────────────
 
-    TestParams requestTest(String uuid, boolean useWs) throws IOException, InterruptedException {
+    TestParams requestTest(String uuid, boolean useWs, String preferServer) throws IOException, InterruptedException {
         ObjectNode body = JSON.createObjectNode();
         body.put("uuid",             uuid);
         body.put("client",           useWs ? "RMBTws" : "RMBT");
@@ -73,6 +73,11 @@ final class ControlClient {
         body.put("language",         "en");
         body.put("timezone",         "UTC");
         body.put("time",             Instant.now().toEpochMilli());
+        // Optional user server selection: request a specific measurement server.
+        if (preferServer != null && !preferServer.isEmpty()) {
+            body.put("prefer_server",         preferServer);
+            body.put("user_server_selection", true);
+        }
         if (!useWs) {
             body.putObject("capabilities").put("RMBThttp", true);
         }

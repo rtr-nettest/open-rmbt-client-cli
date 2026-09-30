@@ -83,6 +83,11 @@ struct TestRequest<'a> {
     language:            &'a str,
     timezone:            &'a str,
     time:                u64,
+    /// Preferred measurement-server UUID (user server selection). Omitted when
+    /// the user did not choose a specific server (server auto-assigned).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prefer_server:       Option<&'a str>,
+    user_server_selection: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     capabilities:        Option<serde_json::Value>,
 }
@@ -244,6 +249,7 @@ pub fn request_test(
     software_version:  &str,
     software_revision: &str,
     use_ws:            bool,
+    prefer_server:     Option<&str>,
     debug:             bool,
 ) -> Result<TestParams> {
     let base = host.trim_end_matches('/');
@@ -272,6 +278,8 @@ pub fn request_test(
         language:          "en",
         timezone:          "UTC",
         time:              now_ms,
+        prefer_server,
+        user_server_selection: prefer_server.is_some(),
         capabilities,
     })?;
 
