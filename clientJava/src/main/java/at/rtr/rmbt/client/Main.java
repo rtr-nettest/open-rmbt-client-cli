@@ -43,6 +43,12 @@ public final class Main {
         String  model        = "Client CLI Java";
         String  device       = null;
         String  serverUuid   = null;
+        // Loop mode: this client runs a single measurement per invocation; the
+        // caller re-spawns it per iteration. See doc/json_interface.md.
+        boolean loopMode     = false;
+        int     loopMaxDelay = 0;
+        int     loopCounter  = 0;
+        String  loopUuidArg  = null;
 
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -66,10 +72,10 @@ public final class Main {
             // Wrapping app version (desktop-app compat, also single-dash);
             // reported as the `device` field prefixed with "App: ".
             else if ("-set-version".equals(a) || "--set-version".equals(a)) device = "App: " + args[++i];
-            else if ("--user-loop-mode".equals(a))                 { /* accepted; not implemented */ }
-            else if ("--user-loop-mode-max-delay".equals(a)
-                  || "--user-loop-mode-test-counter".equals(a)
-                  || "--user-loop-mode-uuid".equals(a))            i++; // accepted for compatibility
+            else if ("--user-loop-mode".equals(a))                 loopMode     = true;
+            else if ("--user-loop-mode-max-delay".equals(a))       loopMaxDelay = Integer.parseInt(args[++i]);
+            else if ("--user-loop-mode-test-counter".equals(a))    loopCounter  = Integer.parseInt(args[++i]);
+            else if ("--user-loop-mode-uuid".equals(a))            loopUuidArg  = args[++i];
             else if ("--help".equals(a))                           { printUsage(); return; }
             else if (a.startsWith("-")) {
                 System.err.println("Unknown option: " + a);
@@ -106,10 +112,23 @@ public final class Main {
                      : forceHttp ? RmbtConn.PROTO_HTTP
                      : RmbtConn.PROTO_HTTP; // resolved again after params
 
-        System.out.println("Contacting control server: " + host);
-        TestParams params = control.requestTest(uuid, forceWs, serverUuid);
+        LoopModeInfo loop = null;
+        if (loopMode) {
+            String lu = (loopUuidArg == null) ? null : loopUuidArg.trim();
+            if (lu != null && (lu.isEmpty() || "null".equals(lu))) lu = null;
+            // Accept the loop UUID with or without the server's "L" prefix: strip a
+            // single leading 'L' so the value sent on the wire is the bare UUID.
+            if (lu != null && lu.startsWith("L")) lu = lu.substring(1);
+            loop = new LoopModeInfo(loopMaxDelay, 0, 0, loopCounter, lu);
+        }
 
-        Gui.uuidInfo(params.testUuid(), params.openTestUuid(), params.token());
+        System.out.println("Contacting control server: " + host);
+        TestParams params = control.requestTest(uuid, forceWs, serverUuid, loop);
+
+        Gui.uuidInfo(params.testUuid(), params.openTestUuid(), params.token(), params.loopUuid());
+        if (params.loopUuid() != null) {
+            System.out.println("Loop UUID: " + params.loopUuid());
+        }
 
         System.out.println("Token:    " + params.token().substring(0, Math.min(40, params.token().length())) + "...");
         System.out.printf("Server:   %s:%d (%s)%n",
@@ -304,7 +323,10 @@ public final class Main {
                   --model NAME        Device model
                   --server_uuid UUID  Preferred measurement-server UUID (prefer_server)
                   --set-version VER   Wrapping app version; reported as device = "App: VER"
-                  --user-loop-mode... Accepted for compatibility (single run)
+                  --user-loop-mode    Mark this run as one loop iteration (sends loopmode_info)
+                  --user-loop-mode-max-delay MIN     Max delay between iterations (minutes)
+                  --user-loop-mode-test-counter N    0-based iteration index
+                  --user-loop-mode-uuid UUID         Server loop UUID; omit on the first iteration
                   --help              Print this help
             """);
     }

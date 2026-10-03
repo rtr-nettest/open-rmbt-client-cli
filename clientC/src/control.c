@@ -253,6 +253,8 @@ int control_request_settings(const char *host, const char *uuid_in,
 
 int control_request_test(const char *host, const char *uuid,
                          int use_ws, const char *prefer_server,
+                         int loop_mode, int loop_max_delay,
+                         int loop_test_counter, const char *loop_uuid,
                          int debug, TestParams *out)
 {
     char url[512];
@@ -277,7 +279,28 @@ int control_request_test(const char *host, const char *uuid,
                  prefer_server);
     }
 
-    char body[1024];
+    /*
+     * Loop mode: the server recognises a loop test by the presence of
+     * loopmode_info. loop_uuid is null on the first iteration (server mints one)
+     * and echoed thereafter. See doc/json_interface.md.
+     */
+    char loop_frag[384];
+    if (loop_mode) {
+        char uuid_field[160];
+        if (loop_uuid && *loop_uuid)
+            snprintf(uuid_field, sizeof(uuid_field), "\"loop_uuid\":\"%s\"", loop_uuid);
+        else
+            snprintf(uuid_field, sizeof(uuid_field), "\"loop_uuid\":null");
+        snprintf(loop_frag, sizeof(loop_frag),
+                 ",\"measurement_type\":\"LOOP_ACTIVE\",\"loopmode\":true,"
+                 "\"loopmode_info\":{\"max_delay\":%d,\"max_movement\":0,"
+                 "\"max_tests\":0,\"test_counter\":%d,%s}",
+                 loop_max_delay, loop_test_counter, uuid_field);
+    } else {
+        snprintf(loop_frag, sizeof(loop_frag), ",\"measurement_type\":\"REGULAR\"");
+    }
+
+    char body[1536];
     if (uuid && *uuid) {
         snprintf(body, sizeof(body),
             "{"
@@ -292,8 +315,9 @@ int control_request_test(const char *host, const char *uuid,
             "\"time\":%llu"
             "%s"
             "%s"
+            "%s"
             "}",
-            uuid, client_id, (unsigned long long)ts, server_frag,
+            uuid, client_id, (unsigned long long)ts, loop_frag, server_frag,
             use_ws ? "" : ",\"capabilities\":{\"RMBThttp\":true}");
     } else {
         snprintf(body, sizeof(body),
@@ -308,8 +332,9 @@ int control_request_test(const char *host, const char *uuid,
             "\"time\":%llu"
             "%s"
             "%s"
+            "%s"
             "}",
-            client_id, (unsigned long long)ts, server_frag,
+            client_id, (unsigned long long)ts, loop_frag, server_frag,
             use_ws ? "" : ",\"capabilities\":{\"RMBThttp\":true}");
     }
 
@@ -330,6 +355,9 @@ int control_request_test(const char *host, const char *uuid,
     json_get_str(resp.data, "open_test_uuid",      out->open_test_uuid, sizeof(out->open_test_uuid));
     json_get_str(resp.data, "test_server_address", out->server_addr,    sizeof(out->server_addr));
     json_get_str(resp.data, "test_server_type",    out->server_type,    sizeof(out->server_type));
+    json_get_str(resp.data, "loop_uuid",           out->loop_uuid,      sizeof(out->loop_uuid));
+    /* Treat the literal string "null" as "no loop UUID". */
+    if (strcmp(out->loop_uuid, "null") == 0) out->loop_uuid[0] = '\0';
 
     uint64_t port_v = 443;
     json_get_u64(resp.data, "test_server_port", &port_v);

@@ -48,12 +48,13 @@ final class Gui {
         emit(n);
     }
 
-    static void uuidInfo(String testUuid, String openTestUuid, String token) {
+    static void uuidInfo(String testUuid, String openTestUuid, String token, String loopUuid) {
         ObjectNode n = JSON.createObjectNode();
         n.put("type", "UUID_INFO");
         n.put("testUuid", testUuid);
         n.put("openTestUuid", openTestUuid);
         n.put("testToken", token);
+        n.put("loopUuid", loopUuid); // null when not a loop test
         emit(n);
     }
 

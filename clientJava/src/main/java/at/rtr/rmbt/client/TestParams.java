@@ -11,5 +11,7 @@ record TestParams(
     int     duration,
     int     numThreads,
     int     waitSecs,
-    String  serverType
+    String  serverType,
+    /** Server loop UUID (loop mode only); null for a single test. */
+    String  loopUuid
 ) {}

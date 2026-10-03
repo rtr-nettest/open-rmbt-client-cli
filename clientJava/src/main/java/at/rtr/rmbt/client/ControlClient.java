@@ -62,7 +62,8 @@ final class ControlClient {
 
     // ── /testRequest ──────────────────────────────────────────────────────────
 
-    TestParams requestTest(String uuid, boolean useWs, String preferServer) throws IOException, InterruptedException {
+    TestParams requestTest(String uuid, boolean useWs, String preferServer, LoopModeInfo loop)
+            throws IOException, InterruptedException {
         ObjectNode body = JSON.createObjectNode();
         body.put("uuid",             uuid);
         body.put("client",           useWs ? "RMBTws" : "RMBT");
@@ -73,6 +74,22 @@ final class ControlClient {
         body.put("language",         "en");
         body.put("timezone",         "UTC");
         body.put("time",             Instant.now().toEpochMilli());
+        // Loop mode: the server recognises a loop test by the presence of
+        // loopmode_info. loop_uuid is null on the first iteration (server mints
+        // one) and echoed thereafter. See doc/json_interface.md.
+        if (loop != null) {
+            body.put("measurement_type", "LOOP_ACTIVE");
+            body.put("loopmode",         true);
+            ObjectNode li = body.putObject("loopmode_info");
+            li.put("max_delay",    loop.maxDelay());
+            li.put("max_movement", loop.maxMovement());
+            li.put("max_tests",    loop.maxTests());
+            li.put("test_counter", loop.testCounter());
+            if (loop.loopUuid() != null) li.put("loop_uuid", loop.loopUuid());
+            else                         li.putNull("loop_uuid");
+        } else {
+            body.put("measurement_type", "REGULAR");
+        }
         // Optional user server selection: request a specific measurement server.
         if (preferServer != null && !preferServer.isEmpty()) {
             body.put("prefer_server",         preferServer);
@@ -97,6 +114,10 @@ final class ControlClient {
         if (portNode.isNumber())      port = portNode.asInt();
         else if (portNode.isTextual()) port = Integer.parseInt(portNode.asText("443").trim());
 
+        // "" (absent) and the literal "null" both mean "no loop UUID".
+        String loopUuid = resp.path("loop_uuid").asText(null);
+        if (loopUuid != null && (loopUuid.isEmpty() || "null".equals(loopUuid))) loopUuid = null;
+
         return new TestParams(
             resp.path("test_token").asText(),
             resp.path("test_uuid").asText(null),
@@ -107,7 +128,8 @@ final class ControlClient {
             asInt(resp, "test_duration",   10),
             asInt(resp, "test_numthreads", 4),
             asInt(resp, "test_wait",       0),
-            resp.path("test_server_type").asText("")
+            resp.path("test_server_type").asText(""),
+            loopUuid
         );
     }
 

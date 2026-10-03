@@ -35,13 +35,20 @@ void gui_state_change(const char *state)
     fflush(stdout);
 }
 
-void gui_uuid_info(const char *test_uuid, const char *open_test_uuid, const char *token)
+void gui_uuid_info(const char *test_uuid, const char *open_test_uuid, const char *token, const char *loop_uuid)
 {
     if (!g_enabled) return;
-    printf("{\"type\":\"UUID_INFO\",\"testUuid\":\"%s\",\"openTestUuid\":\"%s\",\"testToken\":\"%s\"}\n",
+    /* loopUuid is a JSON string when known, else null (single / first iteration). */
+    char loop_field[160];
+    if (loop_uuid && *loop_uuid)
+        snprintf(loop_field, sizeof(loop_field), "\"%s\"", loop_uuid);
+    else
+        snprintf(loop_field, sizeof(loop_field), "null");
+    printf("{\"type\":\"UUID_INFO\",\"testUuid\":\"%s\",\"openTestUuid\":\"%s\",\"testToken\":\"%s\",\"loopUuid\":%s}\n",
            test_uuid ? test_uuid : "",
            open_test_uuid ? open_test_uuid : "",
-           token ? token : "");
+           token ? token : "",
+           loop_field);
     fflush(stdout);
 }
 

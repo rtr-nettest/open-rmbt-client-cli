@@ -159,9 +159,27 @@ fn run() -> Result<()> {
     // control server as prefer_server (+ user_server_selection).
     let server_uuid   = matches.get_one::<String>("server_uuid").map(|s| s.as_str());
 
-    if matches.get_flag("user-loop-mode") {
-        eprintln!("Warning: --user-loop-mode is accepted but not yet implemented; running a single test.");
-    }
+    // Loop mode: this client runs a single measurement per invocation (the
+    // caller re-spawns it per iteration), but when loop mode is enabled it sends
+    // a `loopmode_info` block in the test request so the control server groups
+    // the iterations into one loop. `--user-loop-mode-uuid` carries the server
+    // loop UUID: absent/empty on the first iteration (the server mints one),
+    // echoed back on every subsequent iteration. See doc/json_interface.md.
+    let loop_mode = if matches.get_flag("user-loop-mode") {
+        let max_delay = matches.get_one::<String>("user-loop-mode-max-delay")
+            .and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+        let test_counter = matches.get_one::<String>("user-loop-mode-test-counter")
+            .and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+        // Accept the loop UUID with or without the server's "L" prefix: strip a
+        // single leading 'L' so the value sent on the wire is the bare UUID.
+        let loop_uuid = matches.get_one::<String>("user-loop-mode-uuid")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty() && *s != "null")
+            .map(|s| s.strip_prefix('L').unwrap_or(s).to_string());
+        Some(control::LoopModeInfo { max_delay, max_movement: 0, max_tests: 0, test_counter, loop_uuid })
+    } else {
+        None
+    };
 
     gui::starting_test();
     gui::state_change("INIT");
@@ -185,9 +203,13 @@ fn run() -> Result<()> {
 
     // ── Step 1: request test parameters from the control server ──────────────
     println!("Contacting control server: {host}");
-    let params = control::request_test(host, Some(uuid), VERSION_REVISION, VERSION_REVISION, force_ws, server_uuid, debug)?;
+    let params = control::request_test(host, Some(uuid), VERSION_REVISION, VERSION_REVISION, force_ws, server_uuid, loop_mode.as_ref(), debug)?;
 
-    gui::uuid_info(params.test_uuid.as_deref(), params.open_test_uuid.as_deref(), &params.token);
+    gui::uuid_info(params.test_uuid.as_deref(), params.open_test_uuid.as_deref(), &params.token, params.loop_uuid.as_deref());
+
+    if let Some(ref lu) = params.loop_uuid {
+        println!("Loop UUID: {lu}");
+    }
 
     let preview_token = &params.token[..params.token.len().min(40)];
     println!("Token:    {preview_token}…");

@@ -173,7 +173,10 @@ static void print_usage(const char *prog)
         "      --model NAME        Device model\n"
         "      --server_uuid UUID  Preferred measurement-server UUID (prefer_server)\n"
         "      --set-version VER   Wrapping app version; reported as device = \"App: VER\"\n"
-        "      --user-loop-mode... Accepted for compatibility (single run)\n"
+        "      --user-loop-mode    Mark this run as one loop iteration (sends loopmode_info)\n"
+        "      --user-loop-mode-max-delay MIN     Max delay between iterations (minutes)\n"
+        "      --user-loop-mode-test-counter N    0-based iteration index\n"
+        "      --user-loop-mode-uuid UUID         Server loop UUID; omit on the first iteration\n"
         "      --help              Print this help\n",
         prog);
 }
@@ -205,6 +208,11 @@ int main(int argc, char *argv[])
     const char *model_s      = "Client CLI C";
     const char *set_version  = NULL;
     const char *server_uuid  = NULL;
+    /* Loop mode: one measurement per invocation; caller re-spawns per iteration. */
+    int         loop_mode    = 0;
+    int         loop_delay   = 0;
+    int         loop_counter = 0;
+    const char *loop_uuid_arg = NULL;
 
     /* The desktop app passes the historic single-dash long flag `-set-version`.
      * Normalize it to `--set-version` so getopt_long recognizes it. */
@@ -267,8 +275,10 @@ int main(int argc, char *argv[])
         case OPT_SET_VERSION: set_version = optarg;       break;
         case OPT_SERVER_UUID: server_uuid = optarg;       break;
         case OPT_OS: case OPT_OSVER:                      break; /* accepted, unused */
-        case OPT_LOOP: case OPT_LOOP_DELAY:
-        case OPT_LOOP_COUNTER: case OPT_LOOP_UUID:        break; /* accepted; loop not implemented */
+        case OPT_LOOP:         loop_mode     = 1;         break;
+        case OPT_LOOP_DELAY:   loop_delay    = atoi(optarg); break;
+        case OPT_LOOP_COUNTER: loop_counter  = atoi(optarg); break;
+        case OPT_LOOP_UUID:    loop_uuid_arg = optarg;    break;
         case '?': print_usage(argv[0]); return 0;
         default:  print_usage(argv[0]); return 1;
         }
@@ -318,10 +328,23 @@ int main(int argc, char *argv[])
     /* ── Step 1: control server ──────────────────────────────────────────────── */
     printf("Contacting control server: %s\n", host);
     TestParams params;
-    if (control_request_test(host, uuid_buf, force_ws, server_uuid, debug, &params) < 0)
+    /* Omit an empty/"null" loop UUID so the server mints one on the first iteration. */
+    const char *loop_uuid_send = loop_uuid_arg;
+    if (loop_uuid_send && (!*loop_uuid_send || strcmp(loop_uuid_send, "null") == 0))
+        loop_uuid_send = NULL;
+    /* Accept the loop UUID with or without the server's "L" prefix: strip a single
+     * leading 'L' so the value sent on the wire is the bare UUID. */
+    if (loop_uuid_send && loop_uuid_send[0] == 'L')
+        loop_uuid_send++;
+    if (control_request_test(host, uuid_buf, force_ws, server_uuid,
+                             loop_mode, loop_delay, loop_counter, loop_uuid_send,
+                             debug, &params) < 0)
         return 1;
 
-    gui_uuid_info(params.test_uuid, params.open_test_uuid, params.token);
+    gui_uuid_info(params.test_uuid, params.open_test_uuid, params.token,
+                  params.loop_uuid[0] ? params.loop_uuid : NULL);
+    if (params.loop_uuid[0])
+        printf("Loop UUID: %s\n", params.loop_uuid);
 
     /* Show token preview */
     char token_preview[44] = "";

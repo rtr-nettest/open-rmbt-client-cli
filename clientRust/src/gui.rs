@@ -42,12 +42,13 @@ pub fn state_change(state: &str) {
     emit(json!({ "type": "STATE_CHANGE", "time": now_ms(), "state": state }));
 }
 
-pub fn uuid_info(test_uuid: Option<&str>, open_test_uuid: Option<&str>, token: &str) {
+pub fn uuid_info(test_uuid: Option<&str>, open_test_uuid: Option<&str>, token: &str, loop_uuid: Option<&str>) {
     emit(json!({
         "type":         "UUID_INFO",
         "testUuid":     test_uuid,
         "openTestUuid": open_test_uuid,
         "testToken":    token,
+        "loopUuid":     loop_uuid,
     }));
 }
 

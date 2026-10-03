@@ -15,7 +15,7 @@ int  gui_enabled(void);
 void gui_starting_test(void);
 void gui_ending_test(void);
 void gui_state_change(const char *state);
-void gui_uuid_info(const char *test_uuid, const char *open_test_uuid, const char *token);
+void gui_uuid_info(const char *test_uuid, const char *open_test_uuid, const char *token, const char *loop_uuid);
 void gui_ping_result(uint64_t client_ns, uint64_t server_ns, uint64_t time_ns);
 
 /* Cumulative bytes for the interim monitor (called from transfer threads). */

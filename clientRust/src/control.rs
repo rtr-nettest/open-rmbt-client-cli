@@ -30,6 +30,10 @@ pub struct TestParams {
     pub token:          String,
     pub test_uuid:      Option<String>,
     pub open_test_uuid: Option<String>,
+    /// Server loop UUID returned by the control server when loop mode is active:
+    /// minted on the first iteration, stable for the rest of the loop. `None` for
+    /// a single (non-loop) test.
+    pub loop_uuid:      Option<String>,
     pub server_addr:    String,
     pub server_port:    u16,
     pub encryption:     bool,
@@ -37,6 +41,30 @@ pub struct TestParams {
     pub num_threads:    u32,
     pub wait:           u32,
     pub server_type:    String,
+}
+
+/// `loopmode_info` payload that groups several individual measurements into one
+/// *loop* on the control server.
+///
+/// Serialized exactly as the server's `LoopModeSettings`: `max_delay`,
+/// `max_movement`, `max_tests`, `test_counter`, `loop_uuid`. See
+/// `doc/json_interface.md`.
+#[derive(Serialize)]
+pub struct LoopModeInfo {
+    /// Max waiting time between iterations, in minutes
+    /// (`--user-loop-mode-max-delay`).
+    pub max_delay:    u32,
+    /// Max movement in metres before a new loop starts. Always `0` here — this
+    /// client does not perform signal/GPS measurement.
+    pub max_movement: u32,
+    /// Planned number of tests in the loop; `0` when unbounded/unknown.
+    pub max_tests:    u32,
+    /// 0-based index of this iteration within the loop
+    /// (`--user-loop-mode-test-counter`).
+    pub test_counter: u32,
+    /// Server loop UUID. `null` on the first iteration (the server mints one and
+    /// returns it in the response); echoed back on every subsequent iteration.
+    pub loop_uuid:    Option<String>,
 }
 
 // ─── Wire types ───────────────────────────────────────────────────────────────
@@ -83,6 +111,15 @@ struct TestRequest<'a> {
     language:            &'a str,
     timezone:            &'a str,
     time:                u64,
+    /// `"REGULAR"` for a single test, `"LOOP_ACTIVE"` for a loop iteration.
+    measurement_type:    &'a str,
+    /// `true` on loop iterations; omitted for a single test.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    loopmode:            Option<bool>,
+    /// Loop grouping settings; present only on loop iterations. Its presence is
+    /// what tells the control server that this is a loop test.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    loopmode_info:       Option<&'a LoopModeInfo>,
     /// Preferred measurement-server UUID (user server selection). Omitted when
     /// the user did not choose a specific server (server auto-assigned).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,6 +134,7 @@ struct TestResponse {
     test_token:             Option<String>,
     test_uuid:              Option<String>,
     open_test_uuid:         Option<String>,
+    loop_uuid:              Option<String>,
     test_server_address:    Option<String>,
     test_server_port:       Option<serde_json::Value>,
     test_server_encryption: Option<bool>,
@@ -243,6 +281,7 @@ pub fn request_settings(
         .context("settings response contained no UUID")
 }
 
+#[allow(clippy::too_many_arguments)] // flat list of control-server request fields
 pub fn request_test(
     host:              &str,
     uuid:              Option<&str>,
@@ -250,6 +289,7 @@ pub fn request_test(
     software_revision: &str,
     use_ws:            bool,
     prefer_server:     Option<&str>,
+    loop_mode:         Option<&LoopModeInfo>,
     debug:             bool,
 ) -> Result<TestParams> {
     let base = host.trim_end_matches('/');
@@ -268,6 +308,13 @@ pub fn request_test(
         None
     };
 
+    // The server recognises a loop test by the presence of `loopmode_info`.
+    let (measurement_type, loopmode) = if loop_mode.is_some() {
+        ("LOOP_ACTIVE", Some(true))
+    } else {
+        ("REGULAR", None)
+    };
+
     let body = serde_json::to_value(TestRequest {
         uuid,
         client:            client_id,
@@ -278,6 +325,9 @@ pub fn request_test(
         language:          "en",
         timezone:          "UTC",
         time:              now_ms,
+        measurement_type,
+        loopmode,
+        loopmode_info:     loop_mode,
         prefer_server,
         user_server_selection: prefer_server.is_some(),
         capabilities,
@@ -318,6 +368,8 @@ pub fn request_test(
         token:          resp.test_token.context("missing test_token")?,
         test_uuid:      resp.test_uuid,
         open_test_uuid: resp.open_test_uuid,
+        // `""` (absent) and the literal string `"null"` both mean "no loop UUID".
+        loop_uuid:      resp.loop_uuid.filter(|s| !s.is_empty() && s != "null"),
         server_addr:    resp.test_server_address.context("missing test_server_address")?,
         server_port,
         encryption:     resp.test_server_encryption.unwrap_or(true),
