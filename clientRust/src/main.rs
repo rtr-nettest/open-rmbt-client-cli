@@ -444,6 +444,7 @@ where
     F: Fn(&mut connection::RmbtConn, usize) -> Result<tests::TransferResult>
        + Send + Sync + 'static,
 {
+    let n   = n.clamp(1, MAX_THREADS);
     let f   = Arc::new(f);
     let bar = Arc::new(Barrier::new(n));
     let mut handles = Vec::with_capacity(n);

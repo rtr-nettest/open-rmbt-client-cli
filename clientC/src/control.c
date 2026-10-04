@@ -4,6 +4,21 @@
 #include <string.h>
 #include <time.h>
 #include <curl/curl.h>
+#include <stdarg.h>
+
+/* Append formatted text at *pos, never writing past bsz; on truncation *pos
+ * is clamped to bsz - 1 so later calls cannot underflow (bsz - *pos). */
+static void appendf(char *buf, size_t bsz, size_t *pos, const char *fmt, ...)
+{
+    if (*pos >= bsz - 1) return;
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf + *pos, bsz - *pos, fmt, ap);
+    va_end(ap);
+    if (n < 0) return;
+    if ((size_t)n >= bsz - *pos) *pos = bsz - 1;
+    else *pos += (size_t)n;
+}
 
 /* ── HTTP response buffer ────────────────────────────────────────────────────── */
 
@@ -164,10 +179,10 @@ int control_request_settings(const char *host, const char *uuid_in,
             "\"uuid\":\"%s\","
             "\"language\":\"en\","
             "\"timezone\":\"UTC\","
-            "\"softwareRevision\":\"" GIT_REVISION "\","
-            "\"softwareVersionName\":\"" GIT_REVISION "\","
+            "\"softwareRevision\":\"%s\","
+            "\"softwareVersionName\":\"%s\","
             "\"terms_and_conditions_accepted\":true"
-            "}", uuid_in);
+            "}", uuid_in, GIT_REVISION, GIT_REVISION);
     } else {
         snprintf(body, sizeof(body),
             "{"
@@ -175,10 +190,10 @@ int control_request_settings(const char *host, const char *uuid_in,
             "\"type\":\"DESKTOP\","
             "\"language\":\"en\","
             "\"timezone\":\"UTC\","
-            "\"softwareRevision\":\"" GIT_REVISION "\","
-            "\"softwareVersionName\":\"" GIT_REVISION "\","
+            "\"softwareRevision\":\"%s\","
+            "\"softwareVersionName\":\"%s\","
             "\"terms_and_conditions_accepted\":true"
-            "}");
+            "}", GIT_REVISION, GIT_REVISION);
     }
 
     CurlBuf resp = {NULL, 0};
@@ -308,8 +323,8 @@ int control_request_test(const char *host, const char *uuid,
             "\"client\":\"%s\","
             "\"version\":\"0.9\","
             "\"type\":\"DESKTOP\","
-            "\"softwareVersion\":\"" GIT_REVISION "\","
-            "\"softwareRevision\":\"" GIT_REVISION "\","
+            "\"softwareVersion\":\"%s\","
+            "\"softwareRevision\":\"%s\","
             "\"language\":\"en\","
             "\"timezone\":\"UTC\","
             "\"time\":%llu"
@@ -317,7 +332,7 @@ int control_request_test(const char *host, const char *uuid,
             "%s"
             "%s"
             "}",
-            uuid, client_id, (unsigned long long)ts, loop_frag, server_frag,
+            uuid, client_id, GIT_REVISION, GIT_REVISION, (unsigned long long)ts, loop_frag, server_frag,
             use_ws ? "" : ",\"capabilities\":{\"RMBThttp\":true}");
     } else {
         snprintf(body, sizeof(body),
@@ -325,8 +340,8 @@ int control_request_test(const char *host, const char *uuid,
             "\"client\":\"%s\","
             "\"version\":\"0.9\","
             "\"type\":\"DESKTOP\","
-            "\"softwareVersion\":\"" GIT_REVISION "\","
-            "\"softwareRevision\":\"" GIT_REVISION "\","
+            "\"softwareVersion\":\"%s\","
+            "\"softwareRevision\":\"%s\","
             "\"language\":\"en\","
             "\"timezone\":\"UTC\","
             "\"time\":%llu"
@@ -334,7 +349,7 @@ int control_request_test(const char *host, const char *uuid,
             "%s"
             "%s"
             "}",
-            client_id, (unsigned long long)ts, loop_frag, server_frag,
+            client_id, GIT_REVISION, GIT_REVISION, (unsigned long long)ts, loop_frag, server_frag,
             use_ws ? "" : ",\"capabilities\":{\"RMBThttp\":true}");
     }
 
@@ -422,8 +437,8 @@ int control_submit_result(const char *host,
     else
         device_frag[0] = '\0';
 
-    int pos = 0;
-    pos += snprintf(body + pos, bsz - pos,
+    size_t pos = 0;
+    appendf(body, bsz, &pos,
         "{"
         "\"client_language\":\"%s\","
         "\"client_name\":\"%s\","
@@ -484,21 +499,21 @@ int control_submit_result(const char *host,
         r->test_port_remote);
 
     /* pings array */
-    pos += snprintf(body + pos, bsz - pos, "\"pings\":[");
+    appendf(body, bsz, &pos, "\"pings\":[");
     for (int i = 0; i < r->num_pings; i++) {
-        pos += snprintf(body + pos, bsz - pos,
+        appendf(body, bsz, &pos,
             "%s{\"value\":%llu,\"value_server\":%llu,\"time_ns\":%llu}",
             i ? "," : "",
             (unsigned long long)r->pings[i].value,
             (unsigned long long)r->pings[i].value_server,
             (unsigned long long)r->pings[i].time_ns);
     }
-    pos += snprintf(body + pos, bsz - pos, "],");
+    appendf(body, bsz, &pos, "],");
 
     /* speed_detail array */
-    pos += snprintf(body + pos, bsz - pos, "\"speed_detail\":[");
+    appendf(body, bsz, &pos, "\"speed_detail\":[");
     for (int i = 0; i < r->num_speed_detail; i++) {
-        pos += snprintf(body + pos, bsz - pos,
+        appendf(body, bsz, &pos,
             "%s{\"direction\":\"%s\",\"thread\":%d,\"time\":%llu,\"bytes\":%llu}",
             i ? "," : "",
             r->speed_detail[i].direction,
@@ -506,7 +521,7 @@ int control_submit_result(const char *host,
             (unsigned long long)r->speed_detail[i].time,
             (unsigned long long)r->speed_detail[i].bytes);
     }
-    pos += snprintf(body + pos, bsz - pos, "]}");
+    appendf(body, bsz, &pos, "]}");
 
     CurlBuf resp = {NULL, 0};
     int rc = do_post(url, body, debug, &resp);

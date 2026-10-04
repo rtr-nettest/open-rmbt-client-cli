@@ -2,6 +2,9 @@ name: Build RMBT Client CLI
 
 on: [push]
 
+permissions:
+  contents: read
+
 jobs:
 
   # ─────────────────────────────────────────────────────────────────────────────

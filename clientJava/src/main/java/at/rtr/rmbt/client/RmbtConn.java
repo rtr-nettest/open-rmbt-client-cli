@@ -315,13 +315,16 @@ final class RmbtConn implements Closeable {
     private static SSLContext buildSslContext(boolean noVerify) {
         try {
             SSLContext ctx = SSLContext.getInstance("TLS");
-            TrustManager[] tms = noVerify
-                ? new TrustManager[]{ new X509TrustManager() {
+            TrustManager[] tms = null;  // use default JVM trust store
+            if (noVerify) {
+                // Explicit opt-in via --no-tls-verify (e.g. self-signed measurement servers).
+                System.err.println("WARNING: TLS certificate verification disabled (--no-tls-verify)");
+                tms = new TrustManager[]{ new X509TrustManager() {
                     public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
                     public void checkClientTrusted(X509Certificate[] c, String a) {}
                     public void checkServerTrusted(X509Certificate[] c, String a) {}
-                }}
-                : null;  // use default JVM trust store
+                }};
+            }
             ctx.init(null, tms, null);
             return ctx;
         } catch (Exception e) {
