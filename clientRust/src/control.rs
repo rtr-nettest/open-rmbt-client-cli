@@ -383,28 +383,62 @@ pub fn request_test(
 /// POST `{host}/RMBTControlServer/result`.
 /// Submission errors are logged as warnings but never propagate — the test
 /// has already completed and the data should not be discarded.
-pub fn submit_result(host: &str, result: &TestResultSubmission, debug: bool) -> Result<()> {
+/// Outcome of the `/result` submission, reported to the JSON interface as
+/// `SUBMIT_RESULT`. Submission failures are not fatal for the run.
+pub struct SubmitStatus {
+    pub success:     bool,
+    pub http_status: Option<u16>,
+    pub error:       Option<String>,
+}
+
+/// Extract the control server's `error` array (non-empty on rejection).
+fn server_errors(resp: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(resp).ok()?;
+    let errs: Vec<String> = v.get("error")?.as_array()?
+        .iter()
+        .map(|e| e.as_str().map(str::to_string).unwrap_or_else(|| e.to_string()))
+        .collect();
+    if errs.is_empty() { None } else { Some(errs.join("; ")) }
+}
+
+pub fn submit_result(host: &str, result: &TestResultSubmission, debug: bool) -> Result<SubmitStatus> {
     let base = host.trim_end_matches('/');
     let url  = format!("{base}/RMBTControlServer/result");
 
     let body = serde_json::to_value(result)?;
     if debug {
         eprintln!("[debug] POST {url}");
-        eprintln!("[debug] result body:\n{}", serde_json::to_string_pretty(&body)?);
+        eprintln!("[debug] result body:
+{}", serde_json::to_string_pretty(&body)?);
     }
 
-    match post_json(&url, &body) {
+    let status = match post_json(&url, &body) {
         Ok((code, resp)) if code < 400 => {
-            if debug { eprintln!("[debug] result response:\n{resp}"); }
+            if debug { eprintln!("[debug] result response:
+{resp}"); }
+            match server_errors(&resp) {
+                None => SubmitStatus { success: true, http_status: Some(code), error: None },
+                Some(e) => {
+                    eprintln!("Warning: result rejected by control server: {e}");
+                    SubmitStatus { success: false, http_status: Some(code), error: Some(e) }
+                }
+            }
         }
         Ok((code, resp)) => {
-            if debug { eprintln!("[debug] HTTP {code} response:\n{resp}"); }
+            if debug { eprintln!("[debug] HTTP {code} response:
+{resp}"); }
             eprintln!("Warning: result submission returned HTTP {code}");
+            SubmitStatus {
+                success:     false,
+                http_status: Some(code),
+                error:       Some(format!("result submission returned HTTP {code}")),
+            }
         }
         Err(e) => {
-            eprintln!("Warning: result submission failed: {e}");
+            eprintln!("Warning: result submission failed: {e:#}");
+            SubmitStatus { success: false, http_status: None, error: Some(format!("{e:#}")) }
         }
-    }
+    };
 
-    Ok(())
+    Ok(status)
 }

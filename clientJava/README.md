@@ -50,7 +50,7 @@ java -jar target/rmbt-client-0.9.0.jar --host https://localhost:8080 --no-tls-ve
 | `--debug` | Print control server request/response JSON |
 | `--intermediate` | Print upload throughput every 40 ms per thread |
 | `--set-version VER` | Wrapping app version; reported as the `device` field prefixed with `App: ` (e.g. `--set-version 4.1.0` → `device` = `"App: 4.1.0"`). Also accepted as `-set-version` (single dash) for desktop compatibility. |
-| `-v`, `--verbose` | Emit machine-readable JSON progress messages on stdout (`UUID_INFO`, `STATE_CHANGE`, …). See [`../doc/json_interface.md`](../doc/json_interface.md). |
+| `-v`, `--verbose` | Emit machine-readable JSON progress messages on stdout (`UUID_INFO`, `STATE_CHANGE`, …, the final result as `FINAL_RESULT` with down/up in Mbit/s and the server-RTT ping median in ms, and the submission outcome as `SUBMIT_RESULT`; failures as `STATE_CHANGE` `ERROR` with `phase` and `error`). See [`../doc/json_interface.md`](../doc/json_interface.md). |
 | `--user-loop-mode` | Mark this run as one iteration of a loop: sends a `loopmode_info` block so the control server groups the iterations. See [Loop mode](#loop-mode). |
 | `--user-loop-mode-max-delay MIN` | Max waiting time between loop iterations, in minutes (`loopmode_info.max_delay`) |
 | `--user-loop-mode-test-counter N` | 0-based index of this iteration within the loop (`loopmode_info.test_counter`) |

@@ -1,4 +1,5 @@
 #include "control.h"
+#include "gui.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -111,7 +112,7 @@ static uint64_t now_ms(void)
 /* ── POST helper ─────────────────────────────────────────────────────────────── */
 
 static int do_post(const char *url, const char *body,
-                   int debug, CurlBuf *resp)
+                   int debug, CurlBuf *resp, long *http_code_out)
 {
     CURL *curl = curl_easy_init();
     if (!curl) return -1;
@@ -137,16 +138,17 @@ static int do_post(const char *url, const char *body,
     CURLcode rc = curl_easy_perform(curl);
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    if (http_code_out) *http_code_out = http_code;
     curl_slist_free_all(hdrs);
     curl_easy_cleanup(curl);
 
     if (rc != CURLE_OK) {
-        fprintf(stderr, "curl error: %s\n", curl_easy_strerror(rc));
+        gui_report_error("curl error: %s\n", curl_easy_strerror(rc));
         free(resp->data); resp->data = NULL;
         return -1;
     }
     if (http_code >= 400) {
-        fprintf(stderr, "HTTP %ld: %s\n", http_code, resp->data);
+        gui_report_error("HTTP %ld: %s\n", http_code, resp->data);
         free(resp->data); resp->data = NULL;
         return -1;
     }
@@ -197,7 +199,7 @@ int control_request_settings(const char *host, const char *uuid_in,
     }
 
     CurlBuf resp = {NULL, 0};
-    if (do_post(url, body, debug, &resp) < 0) return -1;
+    if (do_post(url, body, debug, &resp, NULL) < 0) return -1;
 
     /*
      * Response: {"settings":[{ ..., "servers_ws":[{"uuid":"..."},...], ..., "uuid":"CLIENT-UUID", ...}]}
@@ -258,7 +260,7 @@ int control_request_settings(const char *host, const char *uuid_in,
 
     free(resp.data);
     if (found < 0) {
-        fprintf(stderr, "settings response contained no UUID\n");
+        gui_report_error("settings response contained no UUID\n");
         return -1;
     }
     return 0;
@@ -354,11 +356,11 @@ int control_request_test(const char *host, const char *uuid,
     }
 
     CurlBuf resp = {NULL, 0};
-    if (do_post(url, body, debug, &resp) < 0) return -1;
+    if (do_post(url, body, debug, &resp, NULL) < 0) return -1;
 
     if (json_has_errors(resp.data)) {
         const char *ep = strstr(resp.data, "\"error\"");
-        fprintf(stderr, "Control server error: %s\n", ep ? ep : resp.data);
+        gui_report_error("Control server error: %s\n", ep ? ep : resp.data);
         free(resp.data);
         return -1;
     }
@@ -393,11 +395,11 @@ int control_request_test(const char *host, const char *uuid,
     free(resp.data);
 
     if (!out->token[0]) {
-        fprintf(stderr, "Control server: missing test_token\n");
+        gui_report_error("Control server: missing test_token\n");
         return -1;
     }
     if (!out->server_addr[0]) {
-        fprintf(stderr, "Control server: missing test_server_address\n");
+        gui_report_error("Control server: missing test_server_address\n");
         return -1;
     }
     return 0;
@@ -406,8 +408,10 @@ int control_request_test(const char *host, const char *uuid,
 /* ── Public: submit result ───────────────────────────────────────────────────── */
 
 int control_submit_result(const char *host,
-                          const TestResultSubmission *r, int debug)
+                          const TestResultSubmission *r, int debug,
+                          SubmitStatus *st)
 {
+    memset(st, 0, sizeof(*st));
     char base_buf[256];
     strncpy(base_buf, host, sizeof(base_buf) - 1);
     size_t l = strlen(base_buf);
@@ -524,13 +528,21 @@ int control_submit_result(const char *host,
     appendf(body, bsz, &pos, "]}");
 
     CurlBuf resp = {NULL, 0};
-    int rc = do_post(url, body, debug, &resp);
+    int rc = do_post(url, body, debug, &resp, &st->http_status);
     free(body);
-    if (resp.data) free(resp.data);
 
     if (rc < 0) {
+        /* do_post reported the cause (curl error or HTTP status) via gui_report_error. */
+        const char *e = gui_last_error();
+        snprintf(st->error, sizeof(st->error), "%s", (e && *e) ? e : "result submission failed");
         fprintf(stderr, "Warning: result submission failed\n");
-        return -1;   /* non-fatal: caller ignores this */
+    } else if (json_has_errors(resp.data)) {
+        const char *ep = strstr(resp.data, "\"error\"");
+        snprintf(st->error, sizeof(st->error), "%s", ep ? ep : resp.data);
+        fprintf(stderr, "Warning: result rejected by control server: %s\n", st->error);
+    } else {
+        st->success = 1;
     }
+    if (resp.data) free(resp.data);
     return 0;
 }

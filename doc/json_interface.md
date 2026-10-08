@@ -50,7 +50,10 @@ so the divergence is intentional and traceable.
 6. **Liveness.** The app aborts a run after `ALLOWED_INACTIVITY_MS` (default
    **10 000 ms**) with no stdout line. Clients MUST emit at least one message
    (progress or state) within any 10 s window during a phase.
-7. **Exit code.** `0` on success; non-zero signals an error to the app.
+7. **Exit code.** `0` on success (including a measurement whose result
+   submission failed, see §3.8); non-zero signals a failed test. A non-zero exit
+   is preceded by `STATE_CHANGE` `ERROR` (§3.2, §6.1) whenever the client can
+   still report it.
 
 ---
 
@@ -96,7 +99,8 @@ are load-bearing; the rest SHOULD be emitted for fidelity but are not required
 for the current app.
 
 `DebugStates` (message `type` values): `UUID_INFO`, `STATE_CHANGE`,
-`PING_RESULT`, `DOWNLOAD_RESULT`, `UPLOAD_RESULT`, `QOS_RESULT`.
+`PING_RESULT`, `DOWNLOAD_RESULT`, `UPLOAD_RESULT`, `QOS_RESULT`, plus the
+additions of this spec `FINAL_RESULT` (§3.7) and `SUBMIT_RESULT` (§3.8).
 
 ### 3.1 `UUID_INFO`
 
@@ -127,6 +131,14 @@ Emitted on every phase transition (and on error).
 | --- | --- | --- | --- |
 | `state` | string (enum) | ✅ | New phase; see §6. |
 | `time` | number (ms) | — | Wall-clock ms. |
+| `phase` | string | — | **Only with `state:"ERROR"`:** the state the run was in when it failed (e.g. `INIT`, `DOWN`). |
+| `error` | string | — | **Only with `state:"ERROR"`:** single-line human-readable reason. |
+
+Failure example:
+
+```json
+{"type":"STATE_CHANGE","time":1789206991021,"state":"ERROR","phase":"DOWN","error":"all 4 download threads failed"}
+```
 
 ### 3.3 `PING_RESULT`
 
@@ -187,6 +199,56 @@ MAY emit it only if they implement QoS. *(Historic: `QualityOfServiceTest.qosLog
 ```json
 {"type":"QOS_RESULT","time":1789…,"phase":"QOS","qos_result":"<string>"}
 ```
+
+### 3.7 `FINAL_RESULT`
+
+Emitted **once**, after the upload phase and **before** `SUBMITTING_RESULTS`, so
+the app has the final numbers even if the result submission fails. Carries the
+values the client measured and submits to the control server. Not emitted on a
+failed test. *(Addition of this spec; not in the historic fork.)*
+
+```json
+{"type":"FINAL_RESULT","time":1789…,"testUuid":"…","openTestUuid":"O…","loopUuid":null,
+ "down":244.53,"up":51.47,"pingMedian":6.91,"pingCount":10,
+ "downBytes":232068096,"downNs":7012345678,"downThreads":4,
+ "upBytes":48282624,"upNs":7004321000,"upThreads":4}
+```
+
+| Field | Type / unit | Notes |
+| --- | --- | --- |
+| `down` | number, **Mbit/s (decimal)** | Final download throughput, `downBytes × 8 ÷ (downNs ÷ 1e9) ÷ 1e6`. Same unit as `DOWNLOAD_RESULT.down`; equals the submitted `test_speed_download` (kbit/s) ÷ 1000 up to rounding. |
+| `up` | number, **Mbit/s (decimal)** | Final upload throughput, analogous. |
+| `pingMedian` | number, **ms** | Median of the **server-measured** RTTs (`pingServer` of the `PING_RESULT` samples, `pings[].value_server` in the submission); mean of the two middle values for an even count. |
+| `pingCount` | integer | Number of ping samples. |
+| `downBytes` / `upBytes` | integer, bytes | Total bytes of all threads (`test_bytes_download` / `test_bytes_upload`). |
+| `downNs` / `upNs` | integer, ns | Phase duration (`test_nsec_download` / `test_nsec_upload`). |
+| `downThreads` / `upThreads` | integer | Threads that completed the phase (threads that dropped out are excluded). |
+| `testUuid`, `openTestUuid`, `loopUuid` | string \| null | As in `UUID_INFO`. |
+
+The final values differ from the last interim `DOWNLOAD_RESULT`/`UPLOAD_RESULT`
+(the interim monitor's clock also covers connection set-up), so consumers MUST
+use `FINAL_RESULT`, not the last interim message, as the result of the run.
+
+### 3.8 `SUBMIT_RESULT`
+
+Emitted once, after the result POST to the control server (§7), between
+`SUBMITTING_RESULTS` and `END`. A failed submission does **not** fail the run:
+the client still emits `END` and exits `0`. *(Addition of this spec.)*
+
+```json
+{"type":"SUBMIT_RESULT","time":1789…,"success":true,"httpStatus":200,"error":null}
+{"type":"SUBMIT_RESULT","time":1789…,"success":false,"httpStatus":503,"error":"result submission returned HTTP 503"}
+```
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `success` | boolean | `true` if the control server accepted the result (HTTP < 400 and an empty `error` array in its response). |
+| `httpStatus` | integer \| null | HTTP status of the response; `null` if no response was received (e.g. connection failure). |
+| `error` | string \| null | Reason on failure (transport error, HTTP status, or the server's `error` array); `null` on success. |
+
+When `success` is `false`, the result cannot be fetched from the control server
+by `testUuid`; the app should show the `FINAL_RESULT` values and mark them as not
+uploaded.
 
 ---
 
@@ -291,7 +353,10 @@ support): `--token`, `-s/--ssl`, `--ssl-no-verify`, `--ssl-verify`,
   > server, §7). Clients MUST emit **true decimal Mbit/s (÷1 000 000)** and MUST
   > NOT pre-scale to compensate for that historic 1024-based bug.
 
-* **Ping RTT (`pingClient`, `pingServer`): milliseconds** (floating point).
+* **Ping RTT (`pingClient`, `pingServer`, `pingMedian`): milliseconds** (floating
+  point). The summary value (`FINAL_RESULT.pingMedian`, and the "Ping (median)"
+  line of the human-readable output) is the median of the **server-measured**
+  RTTs.
 * **Ping sample time (`pingTimeNs`): nanoseconds**, relative to test start.
   *(The ms/ns asymmetry is historic and load-bearing — the app multiplies the ms
   values by `1e6` and uses `pingTimeNs` verbatim.)*
@@ -322,15 +387,46 @@ Clients MUST emit at least this progression. The desktop consumer acts on
 `PING, INIT_DOWN, DOWN, INIT_UP, UP` (phase-start timestamps) and accepts the
 rest without UI effect. `ERROR` / `ABORTED` MUST be emitted on failure/abort.
 
+### 6.1 Failed tests
+
+A test fails when any step up to and including the upload phase cannot be
+completed (control server unreachable or rejecting the request, measurement
+server unreachable, token rejected, protocol error, all threads of a phase
+failing, …). The client then:
+
+1. emits `STATE_CHANGE` with `state:"ERROR"`, `phase` (the state it was in) and
+   `error` (§3.2);
+2. emits **no** `FINAL_RESULT` and no `END`;
+3. prints the `ENDING TEST.` sentinel (§2);
+4. exits non-zero.
+
+A failure of the result submission alone is **not** a failed test (§3.8). If
+some threads of a phase drop out but at least one completes, the test succeeds
+with fewer threads (`FINAL_RESULT.downThreads`/`upThreads`).
+
+How a consumer determines the outcome:
+
+| Outcome | Observed |
+| --- | --- |
+| Success | `FINAL_RESULT` → `SUBMIT_RESULT` (`success:true`) → `STATE_CHANGE:END`, exit `0` |
+| Success, result not uploaded | as above, but `SUBMIT_RESULT` with `success:false` |
+| Failed | `STATE_CHANGE:ERROR` (with `phase`, `error`), exit ≠ `0` |
+| Crashed / killed | process ends without `END` or `ERROR` → treat as failed |
+
 ---
 
 ## 7. Result submission (control server)
 
-The JSON stream carries only **live progress**, never the final result set. The
-client MUST submit the complete result to the control server itself (the existing
-`/result` POST — historic `RMBTClient.sendResult()`). The app then retrieves the
-authoritative result from the control server **by `testUuid`** (from
-`UUID_INFO`). Consequently `UUID_INFO` is the single indispensable message.
+The client MUST submit the complete result to the control server itself (the
+existing `/result` POST — historic `RMBTClient.sendResult()`) and reports the
+outcome as `SUBMIT_RESULT` (§3.8). The JSON stream carries live progress plus the
+locally measured summary (`FINAL_RESULT`, §3.7), so the app can show the result
+immediately and without a further network round trip. The control server's
+result, retrieved **by `testUuid`** (from `UUID_INFO`), remains authoritative and
+carries additional data (e.g. provider, location).
+
+*(Historic: the fork's JSON stream carried only live progress; the app had to
+fetch every result from the control server.)*
 
 ---
 
@@ -349,10 +445,24 @@ STARTING TEST.
 {"type":"STATE_CHANGE","time":…,"state":"INIT_UP"}
 {"type":"STATE_CHANGE","time":…,"state":"UP"}
 {"type":"UPLOAD_RESULT",…}                   (×N)
+{"type":"FINAL_RESULT","down":…,"up":…,"pingMedian":…,…}
 {"type":"STATE_CHANGE","time":…,"state":"SUBMITTING_RESULTS"}
+{"type":"SUBMIT_RESULT","success":true,"httpStatus":200,"error":null}
 {"type":"STATE_CHANGE","time":…,"state":"END"}
 ENDING TEST.
 (exit 0)
+```
+
+Failed test (e.g. measurement server unreachable during the pre-test):
+
+```
+STARTING TEST.
+{"type":"STATE_CHANGE","time":…,"state":"INIT"}
+{"type":"UUID_INFO",…}
+{"type":"STATE_CHANGE","time":…,"state":"INIT_DOWN"}
+{"type":"STATE_CHANGE","time":…,"state":"ERROR","phase":"INIT_DOWN","error":"…"}
+ENDING TEST.
+(exit 1)
 ```
 
 ---
@@ -366,6 +476,9 @@ Intentional differences between this spec and the JSON-enabled fork:
 | Lifecycle signal | Plain-text `ENDING TEST.` is what the app keys on | `STATE_CHANGE:"END"` is authoritative; `STARTING/ENDING TEST.` kept only as a compat shim (§2) |
 | Throughput unit | Producer already emits decimal Mbit/s (÷1 000 000); the **desktop consumer** mis-scales with 1024² | Clients emit decimal Mbit/s (÷1 000 000); the 1024-based scaling is a historic consumer bug and MUST NOT be reproduced (§5) |
 | QoS | `QOS_RESULT` emitted during QoS | Optional; emit only if QoS is implemented (§3.6) |
+| Final result | Not in the stream; app fetches it from the control server | `FINAL_RESULT` with down/up/ping median emitted before submission (§3.7) |
+| Submission outcome | Not reported | `SUBMIT_RESULT` (§3.8) |
+| Failure reporting | `ERROR` state only | `STATE_CHANGE:ERROR` carries `phase` and `error`; `ENDING TEST.` still printed; exit ≠ 0 (§6.1) |
 
 ---
 
@@ -383,9 +496,9 @@ JSON. `network_type` was hardcoded `97` (CLI) / `98` (applet).
 `DebugStates` message types, the extended `TestStatus`, the extended CLI, and
 `network_type` default `98` — i.e. exactly the contract specified above.
 
-**These clients.** `clientJava`, `clientC`, and `clientRust` currently emit only
-human-readable progress. Implementing §1–§7 (behind `-v`) is net-new work in all
-three.
+**These clients.** `clientJava`, `clientC`, and `clientRust` implement §1–§7
+behind `-v`, including the additions `FINAL_RESULT`, `SUBMIT_RESULT` and the
+extended `ERROR` reporting.
 
 ### Implementation checklist (per client)
 
@@ -399,8 +512,13 @@ three.
 - [ ] Emit `PING_RESULT` / `DOWNLOAD_RESULT` / `UPLOAD_RESULT` at intervals
       ≤ 10 s apart during their phases.
 - [ ] Print the `STARTING TEST.` / `ENDING TEST.` compat sentinels (§2).
+- [ ] Emit `FINAL_RESULT` (§3.7) after the upload phase, before
+      `SUBMITTING_RESULTS`; ping as server-RTT median.
 - [ ] Submit the full result to the control server (already implemented) so the
-      app can fetch it by `testUuid`.
+      app can fetch it by `testUuid`, and report the outcome as `SUBMIT_RESULT`
+      (§3.8).
+- [ ] On failure emit `STATE_CHANGE` `ERROR` with `phase` and `error`, print
+      `ENDING TEST.`, exit non-zero (§6.1).
 - [ ] In loop mode, send `loopmode_info` in the `testRequest` and surface the
       returned `loop_uuid` (§4.1).
 - [ ] Exit `0` on success, non-zero on error.

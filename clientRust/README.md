@@ -90,10 +90,17 @@ by the plain-text sentinels `STARTING TEST.` and `ENDING TEST.`. Message `type`s
 | `type` | Emitted | Key fields |
 |--------|---------|------------|
 | `UUID_INFO` | once the test is registered | `testUuid`, `openTestUuid`, `testToken`, `loopUuid` (loop UUID, or `null` for a single test) |
-| `STATE_CHANGE` | on every phase transition | `state` (`INIT`→`INIT_DOWN`→`PING`→`DOWN`→`INIT_UP`→`UP`→`SUBMITTING_RESULTS`→`END`), `time` |
+| `STATE_CHANGE` | on every phase transition | `state` (`INIT`→`INIT_DOWN`→`PING`→`DOWN`→`INIT_UP`→`UP`→`SUBMITTING_RESULTS`→`END`, or `ERROR`), `time`; with `ERROR` also `phase` and `error` |
 | `PING_RESULT` | per ping sample | `pingClient`/`pingServer` (**ms**), `pingTimeNs` (**ns**) |
 | `DOWNLOAD_RESULT` | ~every 250 ms during `DOWN` | `down` (**decimal Mbit/s**), `bytes` |
 | `UPLOAD_RESULT` | ~every 250 ms during `UP` | `up` (**decimal Mbit/s**), `bytes` |
+| `FINAL_RESULT` | once, after `UP`, before `SUBMITTING_RESULTS` | `down`/`up` (**decimal Mbit/s**), `pingMedian` (**ms**, median of the server-measured RTTs), `pingCount`, `downBytes`/`upBytes`, `downNs`/`upNs`, `downThreads`/`upThreads`, `testUuid`, `openTestUuid`, `loopUuid` |
+| `SUBMIT_RESULT` | once, after the result POST | `success`, `httpStatus` (or `null`), `error` (or `null`) |
+
+**Outcome of a run:** success = `FINAL_RESULT` followed by `STATE_CHANGE` `END`
+and exit code 0 (`SUBMIT_RESULT.success:false` means the result was measured but
+not uploaded). Failure = `STATE_CHANGE` `ERROR` with `phase` and `error`, then
+`ENDING TEST.` and a non-zero exit code; no `FINAL_RESULT` is emitted.
 
 Example:
 

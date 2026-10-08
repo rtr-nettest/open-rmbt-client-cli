@@ -21,6 +21,8 @@ final class Gui {
     private static volatile boolean enabled = false;
     /** Cumulative bytes transferred in the current transfer phase (all threads). */
     private static final AtomicLong PROGRESS = new AtomicLong(0);
+    /** Last state passed to {@link #stateChange}, reported as {@code phase} on ERROR. */
+    private static volatile String phase = "";
 
     private Gui() {}
 
@@ -41,10 +43,25 @@ final class Gui {
     // ── Messages ────────────────────────────────────────────────────────────
 
     static void stateChange(String state) {
+        phase = state;
         ObjectNode n = JSON.createObjectNode();
         n.put("type", "STATE_CHANGE");
         n.put("time", System.currentTimeMillis());
         n.put("state", state);
+        emit(n);
+    }
+
+    /**
+     * STATE_CHANGE to ERROR, carrying the phase in which the run failed and a
+     * human-readable reason. The caller then prints ENDING TEST. and exits non-zero.
+     */
+    static void error(String msg) {
+        ObjectNode n = JSON.createObjectNode();
+        n.put("type", "STATE_CHANGE");
+        n.put("time", System.currentTimeMillis());
+        n.put("state", "ERROR");
+        n.put("phase", phase);
+        n.put("error", msg);
         emit(n);
     }
 
@@ -67,6 +84,44 @@ final class Gui {
         n.put("pingClient", clientNs / 1e6); // ns → ms
         n.put("pingServer", serverNs / 1e6); // ns → ms
         n.put("status", "PING");
+        emit(n);
+    }
+
+    /**
+     * Locally measured final result, emitted once before result submission.
+     * Units as in the interim messages: decimal Mbit/s and ms.
+     */
+    static void finalResult(String testUuid, String openTestUuid, String loopUuid,
+                            double downMbps, double upMbps,
+                            double pingMedianNs, int pingCount,
+                            long downBytes, long downNs, int downThreads,
+                            long upBytes, long upNs, int upThreads) {
+        ObjectNode n = JSON.createObjectNode();
+        n.put("type", "FINAL_RESULT");
+        n.put("time", System.currentTimeMillis());
+        n.put("testUuid", testUuid);
+        n.put("openTestUuid", openTestUuid);
+        n.put("loopUuid", loopUuid);
+        n.put("down", downMbps);
+        n.put("up", upMbps);
+        n.put("pingMedian", pingMedianNs / 1e6); // ns → ms
+        n.put("pingCount", pingCount);
+        n.put("downBytes", downBytes);
+        n.put("downNs", downNs);
+        n.put("downThreads", downThreads);
+        n.put("upBytes", upBytes);
+        n.put("upNs", upNs);
+        n.put("upThreads", upThreads);
+        emit(n);
+    }
+
+    static void submitResult(boolean success, Integer httpStatus, String error) {
+        ObjectNode n = JSON.createObjectNode();
+        n.put("type", "SUBMIT_RESULT");
+        n.put("time", System.currentTimeMillis());
+        n.put("success", success);
+        n.put("httpStatus", httpStatus);
+        n.put("error", error);
         emit(n);
     }
 

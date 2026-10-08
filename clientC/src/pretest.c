@@ -1,6 +1,7 @@
 #include "pretest.h"
 #include "connection.h"
 #include "tests.h"
+#include "gui.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,7 +61,7 @@ int run_pretest(const char *addr, uint16_t port,
 
         if (conn_read_line(conn, line, sizeof(line)) < 0) break;
         if (!strstr(line, "GETCHUNKS")) {
-            fprintf(stderr, "pre-test: expected ACCEPT with GETCHUNKS, got: %s\n", line);
+            gui_report_error("pre-test: expected ACCEPT with GETCHUNKS, got: %s\n", line);
             conn_free(conn);
             return -1;
         }

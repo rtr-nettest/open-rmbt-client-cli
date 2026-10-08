@@ -23,7 +23,34 @@ public final class Main {
         }
     }
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
+        try {
+            run(args);
+        } catch (Exception e) {
+            // In gui mode, report the failure as STATE_CHANGE "ERROR"
+            // (doc/json_interface.md §3.2), then exit non-zero.
+            String msg = describe(e);
+            Gui.error(msg);
+            Gui.endingTest();
+            System.err.println("Error: " + msg);
+            System.exit(1);
+        }
+    }
+
+    /** Single-line reason from the cause chain (some exceptions carry no message). */
+    private static String describe(Throwable e) {
+        StringBuilder sb = new StringBuilder();
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            String m = t.getMessage();
+            String part = (m != null && !m.isBlank()) ? m : t.getClass().getSimpleName();
+            if (sb.indexOf(part) >= 0) continue;
+            if (sb.length() > 0) sb.append(": ");
+            sb.append(part);
+        }
+        return sb.toString();
+    }
+
+    private static void run(String[] args) throws Exception {
         // ── CLI parsing ───────────────────────────────────────────────────────
         String  host         = null;
         String  uuidCli      = null;
@@ -196,7 +223,7 @@ public final class Main {
                 noTlsVerify, protocol, params.token(),
                 duration, dlChunkSize, false, false);
         dlMon.stop();
-        if (dlResults.isEmpty()) { System.err.println("All download threads failed"); System.exit(1); }
+        if (dlResults.isEmpty()) throw new java.io.IOException("all " + dlThreads + " download threads failed");
 
         // ── Step 5: upload ────────────────────────────────────────────────────
         Gui.stateChange("INIT_UP");
@@ -208,7 +235,7 @@ public final class Main {
                 noTlsVerify, protocol, params.token(),
                 duration, ulChunkSize, true, intermediate);
         ulMon.stop();
-        if (ulResults.isEmpty()) { System.err.println("All upload threads failed"); System.exit(1); }
+        if (ulResults.isEmpty()) throw new java.io.IOException("all " + ulThreads + " upload threads failed");
 
         // ── Step 6: aggregate ─────────────────────────────────────────────────
         long dlBytes = 0, dlNs = 0, ulBytes = 0, ulNs = 0;
@@ -220,18 +247,18 @@ public final class Main {
         double dlMbps = dlBytes * 8.0 / (dlNs / 1e9) / 1e6;
         double ulMbps = ulBytes * 8.0 / (ulNs / 1e9) / 1e6;
 
-        long[] clientNsArr = pings.stream().mapToLong(PingResult::clientNs).toArray();
-        Arrays.sort(clientNsArr);
-        long pingMinClient  = clientNsArr.length > 0 ? clientNsArr[0] : 0;
-        long pingMedian     = clientNsArr.length > 0 ? clientNsArr[clientNsArr.length / 2] : 0;
+        double pingMedianNs = median(pings.stream().mapToLong(PingResult::serverNs).toArray());
 
         System.out.println("\n=== Results ===");
-        System.out.printf("Ping (min):     %7.2f ms  (%d pings)%n", pingMinClient / 1e6, pings.size());
-        System.out.printf("Ping (median):  %7.2f ms%n", pingMedian / 1e6);
+        System.out.printf("Ping (median):  %7.2f ms  (server RTT, %d pings)%n", pingMedianNs / 1e6, pings.size());
         System.out.printf("Download:       %7.2f Mbit/s  (%d bytes in %.2fs, %d thread(s))%n",
                 dlMbps, dlBytes, dlNs / 1e9, dlResults.size());
         System.out.printf("Upload:         %7.2f Mbit/s  (%d bytes in %.2fs, %d thread(s))%n",
                 ulMbps, ulBytes, ulNs / 1e9, ulResults.size());
+
+        Gui.finalResult(params.testUuid(), params.openTestUuid(), params.loopUuid(),
+                dlMbps, ulMbps, pingMedianNs, pings.size(),
+                dlBytes, dlNs, dlResults.size(), ulBytes, ulNs, ulResults.size());
 
         // ── Step 7: submit ────────────────────────────────────────────────────
         Gui.stateChange("SUBMITTING_RESULTS");
@@ -253,10 +280,19 @@ public final class Main {
             System.out.println("Result:         https://www.netztest.at/share/" + params.openTestUuid());
 
         System.out.println("\nSubmitting results to control server...");
-        control.submitResult(resultNode);
+        ControlClient.SubmitStatus submitted = control.submitResult(resultNode);
+        Gui.submitResult(submitted.success(), submitted.httpStatus(), submitted.error());
 
         Gui.stateChange("END");
         Gui.endingTest();
+    }
+
+    /** Median of {@code v} (mean of the two middle values for an even count), 0 if empty. */
+    private static double median(long[] v) {
+        if (v.length == 0) return 0;
+        Arrays.sort(v);
+        int m = v.length / 2;
+        return v.length % 2 == 0 ? (v[m - 1] + (double) v[m]) / 2.0 : v[m];
     }
 
     // ── Multi-threaded phase runner ────────────────────────────────────────────

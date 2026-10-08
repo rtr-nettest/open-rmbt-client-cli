@@ -86,5 +86,14 @@ int control_request_test(const char *host, const char *uuid,
                          int loop_test_counter, const char *loop_uuid,
                          int debug, TestParams *out);
 
+/* Outcome of the /result submission (reported as SUBMIT_RESULT). */
+typedef struct {
+    int  success;
+    long http_status;   /* 0 = no HTTP response */
+    char error[512];    /* empty on success */
+} SubmitStatus;
+
+/* Submission failures are not fatal: always returns 0 and fills *st. */
 int control_submit_result(const char *host,
-                          const TestResultSubmission *r, int debug);
+                          const TestResultSubmission *r, int debug,
+                          SubmitStatus *st);

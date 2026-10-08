@@ -23,6 +23,9 @@ fn main() {
     if let Err(e) = run() {
         // Failure paths carry a clear, single-line message (e.g.
         // "token rejected by server: ERR"); print that, not a backtrace.
+        // In gui mode, report it as STATE_CHANGE "ERROR" (doc/json_interface.md §3.2).
+        gui::error(&format!("{e:#}"));
+        gui::ending_test();
         eprintln!("Error: {e:#}");
         std::process::exit(1);
     }
@@ -318,16 +321,10 @@ fn run() -> Result<()> {
     let dl_mbps = dl_bytes as f64 * 8.0 / (dl_ns as f64 / 1e9) / 1_000_000.0;
     let ul_mbps = ul_bytes as f64 * 8.0 / (ul_ns as f64 / 1e9) / 1_000_000.0;
 
-    let ping_min_ms    = ping_results.iter().map(|p| p.client_ns).min().unwrap_or(0) as f64 / 1e6;
-    let ping_median_ms = {
-        let mut v: Vec<u64> = ping_results.iter().map(|p| p.client_ns).collect();
-        v.sort_unstable();
-        *v.get(v.len() / 2).unwrap_or(&0)
-    } as f64 / 1e6;
+    let ping_median_ns = median(ping_results.iter().map(|p| p.server_ns).collect());
 
     println!("\n=== Results ===");
-    println!("Ping (min):     {:7.2} ms  ({} pings)", ping_min_ms, ping_results.len());
-    println!("Ping (median):  {:7.2} ms", ping_median_ms);
+    println!("Ping (median):  {:7.2} ms  (server RTT, {} pings)", ping_median_ns / 1e6, ping_results.len());
     println!(
         "Download:       {:7.2} Mbit/s  ({} bytes in {:.2}s, {} thread(s))",
         dl_mbps, dl_bytes, dl_ns as f64 / 1e9, dl_results.len()
@@ -336,6 +333,22 @@ fn run() -> Result<()> {
         "Upload:         {:7.2} Mbit/s  ({} bytes in {:.2}s, {} thread(s))",
         ul_mbps, ul_bytes, ul_ns as f64 / 1e9, ul_results.len()
     );
+
+    gui::final_result(&gui::FinalResult {
+        test_uuid:      params.test_uuid.as_deref(),
+        open_test_uuid: params.open_test_uuid.as_deref(),
+        loop_uuid:      params.loop_uuid.as_deref(),
+        down_mbps:      dl_mbps,
+        up_mbps:        ul_mbps,
+        ping_median_ns,
+        ping_count:     ping_results.len(),
+        down_bytes:     dl_bytes,
+        down_ns:        dl_ns,
+        down_threads:   dl_results.len(),
+        up_bytes:       ul_bytes,
+        up_ns:          ul_ns,
+        up_threads:     ul_results.len(),
+    });
 
     // ── Step 7: submit results to control server ──────────────────────────────
     let dl_kbps = (dl_bytes as f64 * 8e6 / dl_ns as f64) as u64;
@@ -418,12 +431,21 @@ fn run() -> Result<()> {
 
     gui::state_change("SUBMITTING_RESULTS");
     println!("\nSubmitting results to control server…");
-    control::submit_result(host, &result, debug)?;
+    let submitted = control::submit_result(host, &result, debug)?;
+    gui::submit_result(submitted.success, submitted.http_status, submitted.error.as_deref());
 
     gui::state_change("END");
     gui::ending_test();
 
     Ok(())
+}
+
+/// Median of `v` (mean of the two middle values for an even count), 0 if empty.
+fn median(mut v: Vec<u64>) -> f64 {
+    if v.is_empty() { return 0.0; }
+    v.sort_unstable();
+    let m = v.len() / 2;
+    if v.len().is_multiple_of(2) { (v[m - 1] as f64 + v[m] as f64) / 2.0 } else { v[m] as f64 }
 }
 
 /// Spawn `n` threads.  Each connects independently, waits at a barrier so all

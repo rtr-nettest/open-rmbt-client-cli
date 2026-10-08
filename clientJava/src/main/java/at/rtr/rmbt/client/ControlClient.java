@@ -135,18 +135,60 @@ final class ControlClient {
 
     // ── /result ───────────────────────────────────────────────────────────────
 
-    void submitResult(ObjectNode result) {
+    /**
+     * Outcome of the /result submission, reported to the JSON interface as
+     * SUBMIT_RESULT. Submission failures are not fatal for the run.
+     */
+    record SubmitStatus(boolean success, Integer httpStatus, String error) {}
+
+    SubmitStatus submitResult(ObjectNode result) {
         String url = host + "/RMBTControlServer/result";
         try {
-            post(url, result);
+            HttpResponse<String> resp = send(url, result);
+            int code = resp.statusCode();
+            if (code >= 400) {
+                String err = "result submission returned HTTP " + code;
+                System.err.println("Warning: " + err);
+                return new SubmitStatus(false, code, err);
+            }
+            String errs = serverErrors(resp.body());
+            if (errs != null) {
+                System.err.println("Warning: result rejected by control server: " + errs);
+                return new SubmitStatus(false, code, errs);
+            }
+            return new SubmitStatus(true, code, null);
         } catch (Exception e) {
             System.err.println("Warning: result submission failed: " + e.getMessage());
+            return new SubmitStatus(false, null, String.valueOf(e.getMessage()));
+        }
+    }
+
+    /** The control server's {@code error} array joined with "; ", or null if empty/absent. */
+    private static String serverErrors(String body) {
+        try {
+            JsonNode errs = JSON.readTree(body).path("error");
+            if (!errs.isArray() || errs.isEmpty()) return null;
+            StringBuilder sb = new StringBuilder();
+            for (JsonNode e : errs) {
+                if (sb.length() > 0) sb.append("; ");
+                sb.append(e.isTextual() ? e.asText() : e.toString());
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return null;
         }
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private JsonNode post(String url, ObjectNode body) throws IOException, InterruptedException {
+        HttpResponse<String> resp = send(url, body);
+        if (resp.statusCode() >= 400)
+            throw new IOException("HTTP " + resp.statusCode() + ": " + resp.body().strip());
+        return JSON.readTree(resp.body());
+    }
+
+    private HttpResponse<String> send(String url, ObjectNode body) throws IOException, InterruptedException {
         String bodyStr = JSON.writeValueAsString(body);
         if (debug) {
             System.err.println("[debug] POST " + url);
@@ -160,9 +202,7 @@ final class ControlClient {
                 .build();
         HttpResponse<String> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
         if (debug) System.err.println("[debug] response body:\n" + resp.body());
-        if (resp.statusCode() >= 400)
-            throw new IOException("HTTP " + resp.statusCode() + ": " + resp.body().strip());
-        return JSON.readTree(resp.body());
+        return resp;
     }
 
     static ObjectNode buildResult(

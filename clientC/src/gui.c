@@ -6,9 +6,15 @@
 #include <time.h>
 #include <stdatomic.h>
 #include <pthread.h>
+#include <stdarg.h>
 
 static int              g_enabled  = 0;
 static _Atomic uint64_t g_progress = 0;   /* cumulative bytes, current phase */
+/* Last state passed to gui_state_change, reported as "phase" on ERROR. */
+static char             g_phase[32] = "";
+/* Last error reported in the current phase (see gui_report_error). */
+static char             g_last_error[512] = "";
+static pthread_mutex_t  g_error_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static uint64_t now_ms(void)
 {
@@ -16,6 +22,43 @@ static uint64_t now_ms(void)
     clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
 }
+
+/* Print s as a JSON string literal (with escaping), or null when s is NULL/empty. */
+static void print_json_str(const char *s)
+{
+    if (!s || !*s) { fputs("null", stdout); return; }
+    putchar('"');
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        switch (*p) {
+        case '"':  fputs("\\\"", stdout); break;
+        case '\\': fputs("\\\\", stdout); break;
+        case '\n': fputs("\\n", stdout); break;
+        case '\r': fputs("\\r", stdout); break;
+        case '\t': fputs("\\t", stdout); break;
+        default:
+            if (*p < 0x20) printf("\\u%04x", *p);
+            else putchar(*p);
+        }
+    }
+    putchar('"');
+}
+
+void gui_report_error(const char *fmt, ...)
+{
+    char buf[sizeof(g_last_error)];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    size_t n = strlen(buf);
+    while (n && (buf[n - 1] == '\n' || buf[n - 1] == '\r')) buf[--n] = '\0';
+    fprintf(stderr, "%s\n", buf);
+    pthread_mutex_lock(&g_error_lock);
+    memcpy(g_last_error, buf, n + 1);
+    pthread_mutex_unlock(&g_error_lock);
+}
+
+const char *gui_last_error(void) { return g_last_error; }
 
 void gui_set_enabled(int v) { g_enabled = v; }
 int  gui_enabled(void)      { return g_enabled; }
@@ -29,9 +72,53 @@ void gui_ending_test(void)   { if (g_enabled) { printf("ENDING TEST.\n");   fflu
 
 void gui_state_change(const char *state)
 {
+    snprintf(g_phase, sizeof(g_phase), "%s", state);
+    pthread_mutex_lock(&g_error_lock);
+    g_last_error[0] = '\0';
+    pthread_mutex_unlock(&g_error_lock);
     if (!g_enabled) return;
     printf("{\"type\":\"STATE_CHANGE\",\"time\":%llu,\"state\":\"%s\"}\n",
            (unsigned long long)now_ms(), state);
+    fflush(stdout);
+}
+
+void gui_error(const char *msg)
+{
+    if (!g_enabled) return;
+    printf("{\"type\":\"STATE_CHANGE\",\"time\":%llu,\"state\":\"ERROR\",\"phase\":\"%s\",\"error\":",
+           (unsigned long long)now_ms(), g_phase);
+    print_json_str(msg);
+    printf("}\n");
+    fflush(stdout);
+}
+
+void gui_final_result(const GuiFinalResult *r)
+{
+    if (!g_enabled) return;
+    printf("{\"type\":\"FINAL_RESULT\",\"time\":%llu,\"testUuid\":", (unsigned long long)now_ms());
+    print_json_str(r->test_uuid);
+    printf(",\"openTestUuid\":");
+    print_json_str(r->open_test_uuid);
+    printf(",\"loopUuid\":");
+    print_json_str(r->loop_uuid);
+    printf(",\"down\":%.6f,\"up\":%.6f,\"pingMedian\":%.6f,\"pingCount\":%d,"
+           "\"downBytes\":%llu,\"downNs\":%llu,\"downThreads\":%d,"
+           "\"upBytes\":%llu,\"upNs\":%llu,\"upThreads\":%d}\n",
+           r->down_mbps, r->up_mbps, r->ping_median_ns / 1e6, r->ping_count,
+           (unsigned long long)r->down_bytes, (unsigned long long)r->down_ns, r->down_threads,
+           (unsigned long long)r->up_bytes, (unsigned long long)r->up_ns, r->up_threads);
+    fflush(stdout);
+}
+
+void gui_submit_result(int success, long http_status, const char *error)
+{
+    if (!g_enabled) return;
+    printf("{\"type\":\"SUBMIT_RESULT\",\"time\":%llu,\"success\":%s,\"httpStatus\":",
+           (unsigned long long)now_ms(), success ? "true" : "false");
+    if (http_status > 0) printf("%ld", http_status); else fputs("null", stdout);
+    printf(",\"error\":");
+    print_json_str(error);
+    printf("}\n");
     fflush(stdout);
 }
 

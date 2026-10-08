@@ -8,7 +8,7 @@
 //! ping RTTs in **ms**, and `pingTimeNs` in **ns**, per the spec.
 
 use serde_json::json;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -16,6 +16,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 static ENABLED:  AtomicBool = AtomicBool::new(false);
 /// Cumulative bytes transferred in the current transfer phase (all threads).
 static PROGRESS: AtomicU64  = AtomicU64::new(0);
+/// Last state passed to `state_change`, reported as `phase` on `ERROR`.
+static PHASE:    Mutex<String> = Mutex::new(String::new());
 
 #[derive(Clone, Copy)]
 pub enum Direction { Down, Up }
@@ -39,7 +41,21 @@ pub fn ending_test()   { if enabled() { println!("ENDING TEST."); } }
 // ─── Messages ───────────────────────────────────────────────────────────────
 
 pub fn state_change(state: &str) {
+    if let Ok(mut p) = PHASE.lock() { *p = state.to_string(); }
     emit(json!({ "type": "STATE_CHANGE", "time": now_ms(), "state": state }));
+}
+
+/// `STATE_CHANGE` to `ERROR`, carrying the phase in which the run failed and a
+/// human-readable reason. The caller then prints `ENDING TEST.` and exits non-zero.
+pub fn error(msg: &str) {
+    let phase = PHASE.lock().map(|p| p.clone()).unwrap_or_default();
+    emit(json!({
+        "type":  "STATE_CHANGE",
+        "time":  now_ms(),
+        "state": "ERROR",
+        "phase": phase,
+        "error": msg,
+    }));
 }
 
 pub fn uuid_info(test_uuid: Option<&str>, open_test_uuid: Option<&str>, token: &str, loop_uuid: Option<&str>) {
@@ -61,6 +77,55 @@ pub fn ping_result(client_ns: u64, server_ns: u64, time_ns: u64) {
         "pingClient": client_ns as f64 / 1e6, // ns → ms
         "pingServer": server_ns as f64 / 1e6, // ns → ms
         "status":     "PING",
+    }));
+}
+
+/// Locally measured final result, emitted once before result submission.
+/// Units as in the interim messages: decimal Mbit/s and ms.
+pub struct FinalResult<'a> {
+    pub test_uuid:      Option<&'a str>,
+    pub open_test_uuid: Option<&'a str>,
+    pub loop_uuid:      Option<&'a str>,
+    pub down_mbps:      f64,
+    pub up_mbps:        f64,
+    /// Median of the server-measured ping RTTs, in ns.
+    pub ping_median_ns: f64,
+    pub ping_count:     usize,
+    pub down_bytes:     u64,
+    pub down_ns:        u64,
+    pub down_threads:   usize,
+    pub up_bytes:       u64,
+    pub up_ns:          u64,
+    pub up_threads:     usize,
+}
+
+pub fn final_result(r: &FinalResult) {
+    emit(json!({
+        "type":         "FINAL_RESULT",
+        "time":         now_ms(),
+        "testUuid":     r.test_uuid,
+        "openTestUuid": r.open_test_uuid,
+        "loopUuid":     r.loop_uuid,
+        "down":         r.down_mbps,
+        "up":           r.up_mbps,
+        "pingMedian":   r.ping_median_ns / 1e6, // ns → ms
+        "pingCount":    r.ping_count,
+        "downBytes":    r.down_bytes,
+        "downNs":       r.down_ns,
+        "downThreads":  r.down_threads,
+        "upBytes":      r.up_bytes,
+        "upNs":         r.up_ns,
+        "upThreads":    r.up_threads,
+    }));
+}
+
+pub fn submit_result(success: bool, http_status: Option<u16>, error: Option<&str>) {
+    emit(json!({
+        "type":       "SUBMIT_RESULT",
+        "time":       now_ms(),
+        "success":    success,
+        "httpStatus": http_status,
+        "error":      error,
     }));
 }
 

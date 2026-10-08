@@ -46,7 +46,7 @@ int run_ping(RmbtConn *conn, double duration_secs,
 
         if (conn_read_line(conn, line, sizeof(line)) < 0) return -1;
         if (!strstr(line, "PING")) {
-            fprintf(stderr, "Expected ACCEPT with PING, got: %s\n", line);
+            gui_report_error("Expected ACCEPT with PING, got: %s\n", line);
             return -1;
         }
 
@@ -58,7 +58,7 @@ int run_ping(RmbtConn *conn, double duration_secs,
         uint64_t client_ns = now_ns() - t0;
 
         if (strcmp(line, "PONG") != 0) {
-            fprintf(stderr, "Expected PONG, got: %s\n", line);
+            gui_report_error("Expected PONG, got: %s\n", line);
             return -1;
         }
         if (conn_write_line(conn, "OK") < 0) return -1;
@@ -87,7 +87,7 @@ int run_download(RmbtConn *conn, uint32_t duration_secs,
     char line[256];
     if (conn_read_line(conn, line, sizeof(line)) < 0) return -1;
     if (!strstr(line, "GETTIME")) {
-        fprintf(stderr, "Expected ACCEPT with GETTIME, got: %s\n", line);
+        gui_report_error("Expected ACCEPT with GETTIME, got: %s\n", line);
         return -1;
     }
 
@@ -180,7 +180,7 @@ int run_upload(RmbtConn *conn, uint32_t duration_secs,
     char line[256];
     if (conn_read_line(conn, line, sizeof(line)) < 0) return -1;
     if (!strstr(line, "PUT")) {
-        fprintf(stderr, "Expected ACCEPT with PUT/PUTNORESULT, got: %s\n", line);
+        gui_report_error("Expected ACCEPT with PUT/PUTNORESULT, got: %s\n", line);
         return -1;
     }
 
@@ -190,7 +190,7 @@ int run_upload(RmbtConn *conn, uint32_t duration_secs,
 
     if (conn_read_line(conn, line, sizeof(line)) < 0) return -1;
     if (strcmp(line, "OK") != 0) {
-        fprintf(stderr, "Expected OK after PUTNORESULT, got: %s\n", line);
+        gui_report_error("Expected OK after PUTNORESULT, got: %s\n", line);
         return -1;
     }
 

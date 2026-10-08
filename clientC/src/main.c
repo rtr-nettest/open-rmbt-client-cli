@@ -150,6 +150,30 @@ static int cmp_u64(const void *a, const void *b)
     return x < y ? -1 : x > y ? 1 : 0;
 }
 
+/* Abort the run: report STATE_CHANGE "ERROR" (with the phase's last reported
+ * error appended, if any), print the ENDING TEST. sentinel and return exit code 1. */
+static int fail(const char *what)
+{
+    const char *detail = gui_last_error();
+    char msg[768];
+    if (detail && *detail) snprintf(msg, sizeof(msg), "%s: %s", what, detail);
+    else                   snprintf(msg, sizeof(msg), "%s", what);
+    gui_error(msg);
+    gui_ending_test();
+    fprintf(stderr, "Error: %s\n", msg);
+    return 1;
+}
+
+/* Median of v[0..n) (mean of the two middle values for an even count), 0 if empty.
+ * Sorts v in place. */
+static double median_u64(uint64_t *v, int n)
+{
+    if (n <= 0) return 0.0;
+    qsort(v, (size_t)n, sizeof(uint64_t), cmp_u64);
+    int m = n / 2;
+    return (n % 2 == 0) ? ((double)v[m - 1] + (double)v[m]) / 2.0 : (double)v[m];
+}
+
 static void print_usage(const char *prog)
 {
     printf(
@@ -318,7 +342,7 @@ int main(int argc, char *argv[])
                                      has_stored ? stored : NULL,
                                      debug,
                                      uuid_buf, sizeof(uuid_buf)) < 0)
-            return 1;
+            return fail("control server settings request failed");
 
         /* Persist if new or changed */
         if (!has_stored || strcmp(stored, uuid_buf) != 0)
@@ -339,7 +363,7 @@ int main(int argc, char *argv[])
     if (control_request_test(host, uuid_buf, force_ws, server_uuid,
                              loop_mode, loop_delay, loop_counter, loop_uuid_send,
                              debug, &params) < 0)
-        return 1;
+        return fail("control server test request failed");
 
     gui_uuid_info(params.test_uuid, params.open_test_uuid, params.token,
                   params.loop_uuid[0] ? params.loop_uuid : NULL);
@@ -383,7 +407,7 @@ int main(int argc, char *argv[])
     PretestResult pt;
     if (run_pretest(params.server_addr, port, params.encryption, no_tls_verify,
                     protocol, params.token, server_cap, &pt) < 0)
-        return 1;
+        return fail("pre-test failed");
 
     int dl_threads = threads_ovr ? threads_ovr : pt.dl_threads;
     int ul_threads = threads_ovr ? threads_ovr : pt.ul_threads;
@@ -414,14 +438,14 @@ int main(int argc, char *argv[])
     {
         RmbtConn *conn = conn_connect(params.server_addr, port,
                                       params.encryption, no_tls_verify, protocol);
-        if (!conn) return 1;
-        if (conn_greeting(conn, params.token) < 0) { conn_free(conn); return 1; }
+        if (!conn) return fail("cannot connect to measurement server");
+        if (conn_greeting(conn, params.token) < 0) { conn_free(conn); return fail("greeting failed"); }
         snprintf(server_version, sizeof(server_version), "%s", conn->server_version);
         num_pings = run_ping(conn, 1.0, 10, MAX_PINGS, ping_results, MAX_PINGS);
         conn_quit(conn);
         conn_free(conn);
     }
-    if (num_pings < 0) { fprintf(stderr, "Ping phase failed\n"); return 1; }
+    if (num_pings < 0) return fail("ping phase failed");
 
     /* ── Step 4: download ────────────────────────────────────────────────────── */
     gui_state_change("DOWN");
@@ -434,7 +458,7 @@ int main(int argc, char *argv[])
               duration, dl_chunk_size, 0, PHASE_DOWNLOAD,
               dl_results, &num_dl);
     gui_monitor_stop(dl_mon);
-    if (num_dl == 0) { fprintf(stderr, "All download threads failed\n"); return 1; }
+    if (num_dl == 0) return fail("all download threads failed");
 
     /* ── Step 5: upload ──────────────────────────────────────────────────────── */
     gui_state_change("INIT_UP");
@@ -448,7 +472,7 @@ int main(int argc, char *argv[])
               duration, ul_chunk_size, intermediate, PHASE_UPLOAD,
               ul_results, &num_ul);
     gui_monitor_stop(ul_mon);
-    if (num_ul == 0) { fprintf(stderr, "All upload threads failed\n"); return 1; }
+    if (num_ul == 0) return fail("all upload threads failed");
 
     /* ── Step 6: aggregate ───────────────────────────────────────────────────── */
     uint64_t dl_bytes = 0, dl_ns = 0;
@@ -467,30 +491,41 @@ int main(int argc, char *argv[])
     double dl_mbps = (double)dl_bytes * 8.0 / (dl_ns / 1e9) / 1e6;
     double ul_mbps = (double)ul_bytes * 8.0 / (ul_ns / 1e9) / 1e6;
 
-    /* Ping stats */
-    uint64_t ping_min_client = UINT64_MAX, ping_shortest_server = UINT64_MAX;
-    uint64_t client_ns_arr[MAX_PINGS];
+    /* Ping stats (server-measured RTT) */
+    uint64_t ping_shortest_server = UINT64_MAX;
+    uint64_t server_ns_arr[MAX_PINGS];
     for (int i = 0; i < num_pings; i++) {
-        client_ns_arr[i] = ping_results[i].client_ns;
-        if (ping_results[i].client_ns < ping_min_client)
-            ping_min_client = ping_results[i].client_ns;
+        server_ns_arr[i] = ping_results[i].server_ns;
         if (ping_results[i].server_ns < ping_shortest_server)
             ping_shortest_server = ping_results[i].server_ns;
     }
-    if (ping_min_client    == UINT64_MAX) ping_min_client    = 0;
     if (ping_shortest_server == UINT64_MAX) ping_shortest_server = 0;
-
-    qsort(client_ns_arr, num_pings, sizeof(uint64_t), cmp_u64);
-    uint64_t ping_median_client = num_pings ? client_ns_arr[num_pings / 2] : 0;
+    double ping_median_ns = median_u64(server_ns_arr, num_pings);
 
     printf("\n=== Results ===\n");
-    printf("Ping (min):     %7.2f ms  (%d pings)\n",
-           ping_min_client / 1e6, num_pings);
-    printf("Ping (median):  %7.2f ms\n", ping_median_client / 1e6);
+    printf("Ping (median):  %7.2f ms  (server RTT, %d pings)\n",
+           ping_median_ns / 1e6, num_pings);
     printf("Download:       %7.2f Mbit/s  (%llu bytes in %.2fs, %d thread(s))\n",
            dl_mbps, (unsigned long long)dl_bytes, dl_ns / 1e9, num_dl);
     printf("Upload:         %7.2f Mbit/s  (%llu bytes in %.2fs, %d thread(s))\n",
            ul_mbps, (unsigned long long)ul_bytes, ul_ns / 1e9, num_ul);
+
+    GuiFinalResult fr = {
+        .test_uuid      = params.test_uuid,
+        .open_test_uuid = params.open_test_uuid,
+        .loop_uuid      = params.loop_uuid,
+        .down_mbps      = dl_mbps,
+        .up_mbps        = ul_mbps,
+        .ping_median_ns = ping_median_ns,
+        .ping_count     = num_pings,
+        .down_bytes     = dl_bytes,
+        .down_ns        = dl_ns,
+        .down_threads   = num_dl,
+        .up_bytes       = ul_bytes,
+        .up_ns          = ul_ns,
+        .up_threads     = num_ul,
+    };
+    gui_final_result(&fr);
 
     /* ── Step 7: submit ──────────────────────────────────────────────────────── */
     uint64_t dl_kbps = (uint64_t)((double)dl_bytes * 8e6 / dl_ns);
@@ -509,7 +544,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < num_ul; i++) num_sd += ul_results[i].num_samples;
 
     SpeedItem *sd = calloc((size_t)num_sd, sizeof(SpeedItem));
-    if (!sd) return 1;
+    if (!sd) return fail("out of memory");
     int sd_pos = 0;
     for (int i = 0; i < num_dl; i++) {
         for (int j = 0; j < dl_results[i].num_samples; j++) {
@@ -584,7 +619,9 @@ int main(int argc, char *argv[])
 
     gui_state_change("SUBMITTING_RESULTS");
     printf("\nSubmitting results to control server...\n");
-    control_submit_result(host, &result, debug);
+    SubmitStatus submitted;
+    control_submit_result(host, &result, debug, &submitted);
+    gui_submit_result(submitted.success, submitted.http_status, submitted.error);
 
     gui_state_change("END");
     gui_ending_test();

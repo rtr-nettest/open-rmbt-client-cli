@@ -1,4 +1,5 @@
 #include "connection.h"
+#include "gui.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -308,7 +309,7 @@ static int read_http_headers(RmbtConn *c, char *out, size_t maxlen)
         if (pos >= 4 &&
             out[pos-4] == '\r' && out[pos-3] == '\n' &&
             out[pos-2] == '\r' && out[pos-1] == '\n') break;
-        if (pos >= 8192) { fprintf(stderr, "HTTP headers too large\n"); return -1; }
+        if (pos >= 8192) { gui_report_error("HTTP headers too large\n"); return -1; }
     }
     out[pos] = '\0';
     (void)prev;
@@ -334,7 +335,7 @@ static int http_upgrade(RmbtConn *c, const char *host)
     if (!strstr(headers, "101")) {
         char first[128] = "";
         sscanf(headers, "%127[^\r\n]", first);
-        fprintf(stderr, "Expected HTTP 101 for RMBT upgrade, got: %s\n", first);
+        gui_report_error("Expected HTTP 101 for RMBT upgrade, got: %s\n", first);
         return -1;
     }
     return 0;
@@ -385,7 +386,7 @@ static int ws_upgrade(RmbtConn *c, const char *host)
     if (!strstr(headers, "101")) {
         char first[128] = "";
         sscanf(headers, "%127[^\r\n]", first);
-        fprintf(stderr, "Expected HTTP 101 for WS upgrade, got: %s\n", first);
+        gui_report_error("Expected HTTP 101 for WS upgrade, got: %s\n", first);
         return -1;
     }
     return 0;
@@ -419,7 +420,7 @@ RmbtConn *conn_connect(const char *host, uint16_t port,
     hints.ai_family   = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     if (getaddrinfo(host, port_str, &hints, &res) != 0 || !res) {
-        fprintf(stderr, "Cannot resolve %s\n", host);
+        gui_report_error("Cannot resolve %s\n", host);
         return NULL;
     }
 
@@ -433,7 +434,7 @@ RmbtConn *conn_connect(const char *host, uint16_t port,
     freeaddrinfo(res);
 
     if (fd < 0) {
-        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        gui_report_error("Cannot connect to %s:%u\n", host, port);
         return NULL;
     }
 
@@ -493,7 +494,7 @@ int conn_greeting(RmbtConn *c, const char *token)
     const char *vp = line;
     while (*vp == '\0' || *vp == ' ' || *vp == '\t') vp++;
     if (strncmp(vp, "RMBTv", 5) != 0) {
-        fprintf(stderr, "Unexpected greeting: %s\n", line);
+        gui_report_error("Unexpected greeting: %s\n", line);
         return -1;
     }
     /* Record the announced server version (text after "RMBTv"). */
@@ -502,7 +503,7 @@ int conn_greeting(RmbtConn *c, const char *token)
     /* Server sends: ACCEPT TOKEN QUIT */
     if (conn_read_line(c, line, sizeof(line)) < 0) return -1;
     if (!strstr(line, "TOKEN")) {
-        fprintf(stderr, "Server did not offer TOKEN: %s\n", line);
+        gui_report_error("Server did not offer TOKEN: %s\n", line);
         return -1;
     }
 
@@ -514,7 +515,7 @@ int conn_greeting(RmbtConn *c, const char *token)
     /* Server sends: OK */
     if (conn_read_line(c, line, sizeof(line)) < 0) return -1;
     if (strcmp(line, "OK") != 0) {
-        fprintf(stderr, "Token rejected: %s\n", line);
+        gui_report_error("Token rejected: %s\n", line);
         return -1;
     }
 
