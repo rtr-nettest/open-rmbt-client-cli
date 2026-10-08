@@ -89,7 +89,7 @@ final class Gui {
 
     /**
      * Locally measured final result, emitted once before result submission.
-     * Units as in the interim messages: decimal Mbit/s and ms.
+     * Units as in the interim messages: decimal Mbit/s and ms, rounded to 3 decimals.
      */
     static void finalResult(String testUuid, String openTestUuid, String loopUuid,
                             double downMbps, double upMbps,
@@ -102,9 +102,9 @@ final class Gui {
         n.put("testUuid", testUuid);
         n.put("openTestUuid", openTestUuid);
         n.put("loopUuid", loopUuid);
-        n.put("down", downMbps);
-        n.put("up", upMbps);
-        n.put("pingMedian", pingMedianNs / 1e6); // ns → ms
+        n.put("down", round3(downMbps));
+        n.put("up", round3(upMbps));
+        n.put("pingMedian", round3(pingMedianNs / 1e6)); // ns → ms
         n.put("pingCount", pingCount);
         n.put("downBytes", downBytes);
         n.put("downNs", downNs);
@@ -114,6 +114,9 @@ final class Gui {
         n.put("upThreads", upThreads);
         emit(n);
     }
+
+    /** Round to 3 decimals (final results are reported as e.g. 412.123). */
+    private static double round3(double x) { return Math.round(x * 1000.0) / 1000.0; }
 
     static void submitResult(boolean success, Integer httpStatus, String error) {
         ObjectNode n = JSON.createObjectNode();

@@ -250,10 +250,10 @@ public final class Main {
         double pingMedianNs = median(pings.stream().mapToLong(PingResult::serverNs).toArray());
 
         System.out.println("\n=== Results ===");
-        System.out.printf("Ping (median):  %7.2f ms  (server RTT, %d pings)%n", pingMedianNs / 1e6, pings.size());
-        System.out.printf("Download:       %7.2f Mbit/s  (%d bytes in %.2fs, %d thread(s))%n",
+        System.out.printf("Ping:           %7.3f ms  (%d pings)%n", pingMedianNs / 1e6, pings.size());
+        System.out.printf("Download:       %7.3f Mbit/s  (%d bytes in %.2fs, %d thread(s))%n",
                 dlMbps, dlBytes, dlNs / 1e9, dlResults.size());
-        System.out.printf("Upload:         %7.2f Mbit/s  (%d bytes in %.2fs, %d thread(s))%n",
+        System.out.printf("Upload:         %7.3f Mbit/s  (%d bytes in %.2fs, %d thread(s))%n",
                 ulMbps, ulBytes, ulNs / 1e9, ulResults.size());
 
         Gui.finalResult(params.testUuid(), params.openTestUuid(), params.loopUuid(),

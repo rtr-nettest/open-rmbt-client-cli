@@ -23,7 +23,8 @@ void gui_ping_result(uint64_t client_ns, uint64_t server_ns, uint64_t time_ns);
 void gui_error(const char *msg);
 
 /* Locally measured final result, emitted once before result submission.
- * Units as in the interim messages: decimal Mbit/s and ms (ping_median_ns is
+ * Units as in the interim messages: decimal Mbit/s and ms, rounded to 3
+ * decimals on output (ping_median_ns is
  * the median of the server-measured RTTs, converted to ms on output). */
 typedef struct {
     const char *test_uuid;

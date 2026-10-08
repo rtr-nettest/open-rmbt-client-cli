@@ -81,7 +81,7 @@ pub fn ping_result(client_ns: u64, server_ns: u64, time_ns: u64) {
 }
 
 /// Locally measured final result, emitted once before result submission.
-/// Units as in the interim messages: decimal Mbit/s and ms.
+/// Units as in the interim messages: decimal Mbit/s and ms, rounded to 3 decimals.
 pub struct FinalResult<'a> {
     pub test_uuid:      Option<&'a str>,
     pub open_test_uuid: Option<&'a str>,
@@ -99,6 +99,9 @@ pub struct FinalResult<'a> {
     pub up_threads:     usize,
 }
 
+/// Round to 3 decimals (final results are reported as e.g. 412.123).
+fn round3(x: f64) -> f64 { (x * 1000.0).round() / 1000.0 }
+
 pub fn final_result(r: &FinalResult) {
     emit(json!({
         "type":         "FINAL_RESULT",
@@ -106,9 +109,9 @@ pub fn final_result(r: &FinalResult) {
         "testUuid":     r.test_uuid,
         "openTestUuid": r.open_test_uuid,
         "loopUuid":     r.loop_uuid,
-        "down":         r.down_mbps,
-        "up":           r.up_mbps,
-        "pingMedian":   r.ping_median_ns / 1e6, // ns → ms
+        "down":         round3(r.down_mbps),
+        "up":           round3(r.up_mbps),
+        "pingMedian":   round3(r.ping_median_ns / 1e6), // ns → ms
         "pingCount":    r.ping_count,
         "downBytes":    r.down_bytes,
         "downNs":       r.down_ns,

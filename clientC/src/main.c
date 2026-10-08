@@ -503,11 +503,11 @@ int main(int argc, char *argv[])
     double ping_median_ns = median_u64(server_ns_arr, num_pings);
 
     printf("\n=== Results ===\n");
-    printf("Ping (median):  %7.2f ms  (server RTT, %d pings)\n",
+    printf("Ping:           %7.3f ms  (%d pings)\n",
            ping_median_ns / 1e6, num_pings);
-    printf("Download:       %7.2f Mbit/s  (%llu bytes in %.2fs, %d thread(s))\n",
+    printf("Download:       %7.3f Mbit/s  (%llu bytes in %.2fs, %d thread(s))\n",
            dl_mbps, (unsigned long long)dl_bytes, dl_ns / 1e9, num_dl);
-    printf("Upload:         %7.2f Mbit/s  (%llu bytes in %.2fs, %d thread(s))\n",
+    printf("Upload:         %7.3f Mbit/s  (%llu bytes in %.2fs, %d thread(s))\n",
            ul_mbps, (unsigned long long)ul_bytes, ul_ns / 1e9, num_ul);
 
     GuiFinalResult fr = {

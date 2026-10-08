@@ -216,9 +216,9 @@ failed test. *(Addition of this spec; not in the historic fork.)*
 
 | Field | Type / unit | Notes |
 | --- | --- | --- |
-| `down` | number, **Mbit/s (decimal)** | Final download throughput, `downBytes × 8 ÷ (downNs ÷ 1e9) ÷ 1e6`. Same unit as `DOWNLOAD_RESULT.down`; equals the submitted `test_speed_download` (kbit/s) ÷ 1000 up to rounding. |
-| `up` | number, **Mbit/s (decimal)** | Final upload throughput, analogous. |
-| `pingMedian` | number, **ms** | Median of the **server-measured** RTTs (`pingServer` of the `PING_RESULT` samples, `pings[].value_server` in the submission); mean of the two middle values for an even count. |
+| `down` | number, **Mbit/s (decimal)** | Final download throughput, `downBytes × 8 ÷ (downNs ÷ 1e9) ÷ 1e6`, rounded to 3 decimals (e.g. `412.123`). Same unit as `DOWNLOAD_RESULT.down`; equals the submitted `test_speed_download` (kbit/s) ÷ 1000 up to rounding. |
+| `up` | number, **Mbit/s (decimal)** | Final upload throughput, analogous (3 decimals). |
+| `pingMedian` | number, **ms** | Median of the **server-measured** RTTs (`pingServer` of the `PING_RESULT` samples, `pings[].value_server` in the submission); mean of the two middle values for an even count; rounded to 3 decimals. |
 | `pingCount` | integer | Number of ping samples. |
 | `downBytes` / `upBytes` | integer, bytes | Total bytes of all threads (`test_bytes_download` / `test_bytes_upload`). |
 | `downNs` / `upNs` | integer, ns | Phase duration (`test_nsec_download` / `test_nsec_upload`). |
@@ -354,9 +354,10 @@ support): `--token`, `-s/--ssl`, `--ssl-no-verify`, `--ssl-verify`,
   > NOT pre-scale to compensate for that historic 1024-based bug.
 
 * **Ping RTT (`pingClient`, `pingServer`, `pingMedian`): milliseconds** (floating
-  point). The summary value (`FINAL_RESULT.pingMedian`, and the "Ping (median)"
-  line of the human-readable output) is the median of the **server-measured**
-  RTTs.
+  point). The summary value (`FINAL_RESULT.pingMedian`, and the "Ping" line of
+  the human-readable output) is the median of the **server-measured** RTTs.
+* **Final results** (`FINAL_RESULT.down`, `up`, `pingMedian`, and the human-readable
+  summary) are rounded to **3 decimals**; interim messages are not rounded.
 * **Ping sample time (`pingTimeNs`): nanoseconds**, relative to test start.
   *(The ms/ns asymmetry is historic and load-bearing — the app multiplies the ms
   values by `1e6` and uses `pingTimeNs` verbatim.)*

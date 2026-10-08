@@ -324,13 +324,13 @@ fn run() -> Result<()> {
     let ping_median_ns = median(ping_results.iter().map(|p| p.server_ns).collect());
 
     println!("\n=== Results ===");
-    println!("Ping (median):  {:7.2} ms  (server RTT, {} pings)", ping_median_ns / 1e6, ping_results.len());
+    println!("Ping:           {:7.3} ms  ({} pings)", ping_median_ns / 1e6, ping_results.len());
     println!(
-        "Download:       {:7.2} Mbit/s  ({} bytes in {:.2}s, {} thread(s))",
+        "Download:       {:7.3} Mbit/s  ({} bytes in {:.2}s, {} thread(s))",
         dl_mbps, dl_bytes, dl_ns as f64 / 1e9, dl_results.len()
     );
     println!(
-        "Upload:         {:7.2} Mbit/s  ({} bytes in {:.2}s, {} thread(s))",
+        "Upload:         {:7.3} Mbit/s  ({} bytes in {:.2}s, {} thread(s))",
         ul_mbps, ul_bytes, ul_ns as f64 / 1e9, ul_results.len()
     );
 

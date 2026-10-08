@@ -101,7 +101,7 @@ void gui_final_result(const GuiFinalResult *r)
     print_json_str(r->open_test_uuid);
     printf(",\"loopUuid\":");
     print_json_str(r->loop_uuid);
-    printf(",\"down\":%.6f,\"up\":%.6f,\"pingMedian\":%.6f,\"pingCount\":%d,"
+    printf(",\"down\":%.3f,\"up\":%.3f,\"pingMedian\":%.3f,\"pingCount\":%d,"
            "\"downBytes\":%llu,\"downNs\":%llu,\"downThreads\":%d,"
            "\"upBytes\":%llu,\"upNs\":%llu,\"upThreads\":%d}\n",
            r->down_mbps, r->up_mbps, r->ping_median_ns / 1e6, r->ping_count,

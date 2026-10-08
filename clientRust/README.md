@@ -94,7 +94,7 @@ by the plain-text sentinels `STARTING TEST.` and `ENDING TEST.`. Message `type`s
 | `PING_RESULT` | per ping sample | `pingClient`/`pingServer` (**ms**), `pingTimeNs` (**ns**) |
 | `DOWNLOAD_RESULT` | ~every 250 ms during `DOWN` | `down` (**decimal Mbit/s**), `bytes` |
 | `UPLOAD_RESULT` | ~every 250 ms during `UP` | `up` (**decimal Mbit/s**), `bytes` |
-| `FINAL_RESULT` | once, after `UP`, before `SUBMITTING_RESULTS` | `down`/`up` (**decimal Mbit/s**), `pingMedian` (**ms**, median of the server-measured RTTs), `pingCount`, `downBytes`/`upBytes`, `downNs`/`upNs`, `downThreads`/`upThreads`, `testUuid`, `openTestUuid`, `loopUuid` |
+| `FINAL_RESULT` | once, after `UP`, before `SUBMITTING_RESULTS` | `down`/`up` (**decimal Mbit/s**), `pingMedian` (**ms**, median of the server-measured RTTs), all rounded to 3 decimals, `pingCount`, `downBytes`/`upBytes`, `downNs`/`upNs`, `downThreads`/`upThreads`, `testUuid`, `openTestUuid`, `loopUuid` |
 | `SUBMIT_RESULT` | once, after the result POST | `success`, `httpStatus` (or `null`), `error` (or `null`) |
 
 **Outcome of a run:** success = `FINAL_RESULT` followed by `STATE_CHANGE` `END`
