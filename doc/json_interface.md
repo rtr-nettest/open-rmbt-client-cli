@@ -281,6 +281,8 @@ Loop mode (sent only when looping):
 | `--user-loop-mode-max-delay` | minutes | Max delay between iterations. |
 | `--user-loop-mode-test-counter` | integer | 0-based iteration counter. |
 | `--user-loop-mode-uuid` | `<uuid>` | Server loop UUID; **omitted on the first iteration** (server mints it — never client-generated). Accepted with or without the `L` prefix (§4.1). |
+| `--user-loop-mode-max-tests` | positive integer | *Optional.* Planned number of tests in the loop (`loopmode_info.max_tests`). Omitted from `loopmode_info` when not given. |
+| `--user-loop-mode-cert` | *(flag)* or `true`/`false` | *Optional.* Certification mode (`loopmode_info.cert_mode`). Bare flag = `true`; an explicit value may follow as `--user-loop-mode-cert=false` or `--user-loop-mode-cert false`. Omitted from `loopmode_info` when not given. |
 
 ### 4.1 Loop UUID round-trip
 
@@ -296,9 +298,10 @@ re-spawns it per iteration. Loop membership is established at registration: when
   "loopmode_info": {
     "max_delay":    0,                  // --user-loop-mode-max-delay (minutes)
     "max_movement": 0,                  // always 0: no signal/GPS measurement here
-    "max_tests":    0,                  // 0 = unbounded/unknown
+    "max_tests":    10,                 // --user-loop-mode-max-tests; omitted when not given
     "test_counter": 0,                  // --user-loop-mode-test-counter
-    "loop_uuid":    null                // null on iteration 0 → server mints one
+    "loop_uuid":    null,               // null on iteration 0 → server mints one
+    "cert_mode":    true                // --user-loop-mode-cert; omitted when not given
   }
 }
 ```
@@ -505,7 +508,7 @@ extended `ERROR` reporting.
 
 - [ ] Accept the argv in §4 (single-dash spellings), at minimum `-h`, `-p`, `-u`,
       `-v`, `--nettype`, `--type`, `--platform`, `--os`, `--osver`, `--model`,
-      `-set-version`, and the four `--user-loop-mode*` flags.
+      `-set-version`, and the six `--user-loop-mode*` flags.
 - [ ] When `-v` is set, emit single-line JSON messages (§3) with the correct
       units (§5); otherwise stay silent on the JSON channel.
 - [ ] Emit `UUID_INFO` as soon as the test UUID is known.

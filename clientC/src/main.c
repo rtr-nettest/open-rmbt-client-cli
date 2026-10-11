@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <pthread.h>
@@ -201,6 +202,8 @@ static void print_usage(const char *prog)
         "      --user-loop-mode-max-delay MIN     Max delay between iterations (minutes)\n"
         "      --user-loop-mode-test-counter N    0-based iteration index\n"
         "      --user-loop-mode-uuid UUID         Server loop UUID; omit on the first iteration\n"
+        "      --user-loop-mode-max-tests N       Planned number of tests in the loop (positive)\n"
+        "      --user-loop-mode-cert[=true|false] Certification mode (bare flag = true)\n"
         "      --help              Print this help\n",
         prog);
 }
@@ -237,6 +240,8 @@ int main(int argc, char *argv[])
     int         loop_delay   = 0;
     int         loop_counter = 0;
     const char *loop_uuid_arg = NULL;
+    int         loop_max_tests = -1;   /* optional: -1 = omit from loopmode_info */
+    int         loop_cert      = -1;   /* optional: -1 = omit, else 0/1 */
 
     /* The desktop app passes the historic single-dash long flag `-set-version`.
      * Normalize it to `--set-version` so getopt_long recognizes it. */
@@ -247,7 +252,7 @@ int main(int argc, char *argv[])
     enum {
         OPT_NETTYPE = 1000, OPT_TYPE, OPT_PLATFORM, OPT_OS, OPT_OSVER,
         OPT_MODEL, OPT_SET_VERSION, OPT_SERVER_UUID, OPT_LOOP, OPT_LOOP_DELAY,
-        OPT_LOOP_COUNTER, OPT_LOOP_UUID
+        OPT_LOOP_COUNTER, OPT_LOOP_UUID, OPT_LOOP_MAX_TESTS, OPT_LOOP_CERT
     };
 
     static struct option long_opts[] = {
@@ -274,6 +279,8 @@ int main(int argc, char *argv[])
         {"user-loop-mode-max-delay",    required_argument, NULL, OPT_LOOP_DELAY},
         {"user-loop-mode-test-counter", required_argument, NULL, OPT_LOOP_COUNTER},
         {"user-loop-mode-uuid",         required_argument, NULL, OPT_LOOP_UUID},
+        {"user-loop-mode-max-tests",    required_argument, NULL, OPT_LOOP_MAX_TESTS},
+        {"user-loop-mode-cert",         optional_argument, NULL, OPT_LOOP_CERT},
         {"help",          no_argument,       NULL, '?'},
         {NULL, 0, NULL, 0}
     };
@@ -303,6 +310,30 @@ int main(int argc, char *argv[])
         case OPT_LOOP_DELAY:   loop_delay    = atoi(optarg); break;
         case OPT_LOOP_COUNTER: loop_counter  = atoi(optarg); break;
         case OPT_LOOP_UUID:    loop_uuid_arg = optarg;    break;
+        case OPT_LOOP_MAX_TESTS: {
+            char *end;
+            long v = strtol(optarg, &end, 10);
+            if (end == optarg || *end || v <= 0 || v > 1000000) {
+                fprintf(stderr, "Error: --user-loop-mode-max-tests must be a positive number, got: %s\n", optarg);
+                return 1;
+            }
+            loop_max_tests = (int)v;
+            break;
+        }
+        case OPT_LOOP_CERT: {
+            /* Boolean: bare flag = true; or "=true|false" / a following "true|false". */
+            const char *v = optarg;
+            if (!v && optind < argc &&
+                (strcasecmp(argv[optind], "true") == 0 || strcasecmp(argv[optind], "false") == 0))
+                v = argv[optind++];
+            if (!v || strcasecmp(v, "true") == 0)       loop_cert = 1;
+            else if (strcasecmp(v, "false") == 0)       loop_cert = 0;
+            else {
+                fprintf(stderr, "Error: --user-loop-mode-cert expects true or false, got: %s\n", v);
+                return 1;
+            }
+            break;
+        }
         case '?': print_usage(argv[0]); return 0;
         default:  print_usage(argv[0]); return 1;
         }
@@ -362,6 +393,7 @@ int main(int argc, char *argv[])
         loop_uuid_send++;
     if (control_request_test(host, uuid_buf, force_ws, server_uuid,
                              loop_mode, loop_delay, loop_counter, loop_uuid_send,
+                             loop_max_tests, loop_cert,
                              debug, &params) < 0)
         return fail("control server test request failed");
 

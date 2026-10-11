@@ -79,11 +79,14 @@ int control_request_settings(const char *host, const char *uuid_in,
  * Loop mode: when loop_mode != 0, a loopmode_info block is sent so the control
  * server groups the iterations. loop_uuid is NULL/empty on the first iteration
  * (the server mints one, returned in out->loop_uuid) and passed back thereafter.
+ * loop_max_tests (> 0) and loop_cert (0/1) are optional: a negative value
+ * omits the field from loopmode_info.
  */
 int control_request_test(const char *host, const char *uuid,
                          int use_ws, const char *prefer_server,
                          int loop_mode, int loop_max_delay,
                          int loop_test_counter, const char *loop_uuid,
+                         int loop_max_tests, int loop_cert,
                          int debug, TestParams *out);
 
 /* Outcome of the /result submission (reported as SUBMIT_RESULT). */

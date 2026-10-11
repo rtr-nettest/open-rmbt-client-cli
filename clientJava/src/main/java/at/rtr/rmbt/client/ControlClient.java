@@ -83,10 +83,11 @@ final class ControlClient {
             ObjectNode li = body.putObject("loopmode_info");
             li.put("max_delay",    loop.maxDelay());
             li.put("max_movement", loop.maxMovement());
-            li.put("max_tests",    loop.maxTests());
+            if (loop.maxTests() != null) li.put("max_tests", loop.maxTests());
             li.put("test_counter", loop.testCounter());
             if (loop.loopUuid() != null) li.put("loop_uuid", loop.loopUuid());
             else                         li.putNull("loop_uuid");
+            if (loop.certMode() != null) li.put("cert_mode", loop.certMode());
         } else {
             body.put("measurement_type", "REGULAR");
         }

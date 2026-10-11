@@ -76,6 +76,8 @@ public final class Main {
         int     loopMaxDelay = 0;
         int     loopCounter  = 0;
         String  loopUuidArg  = null;
+        Integer loopMaxTests = null;   // optional: omitted from loopmode_info when null
+        Boolean loopCert     = null;   // optional: omitted from loopmode_info when null
 
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -103,6 +105,32 @@ public final class Main {
             else if ("--user-loop-mode-max-delay".equals(a))       loopMaxDelay = Integer.parseInt(args[++i]);
             else if ("--user-loop-mode-test-counter".equals(a))    loopCounter  = Integer.parseInt(args[++i]);
             else if ("--user-loop-mode-uuid".equals(a))            loopUuidArg  = args[++i];
+            else if ("--user-loop-mode-max-tests".equals(a)) {
+                String v = args[++i];
+                try { loopMaxTests = Integer.parseInt(v.trim()); } catch (NumberFormatException e) { loopMaxTests = 0; }
+                if (loopMaxTests <= 0) {
+                    System.err.println("Error: --user-loop-mode-max-tests must be a positive number, got: " + v);
+                    System.exit(1);
+                }
+            }
+            // Boolean: bare flag = true; or "=true|false" / a following "true|false".
+            else if ("--user-loop-mode-cert".equals(a)) {
+                String next = i + 1 < args.length ? args[i + 1] : null;
+                if ("true".equalsIgnoreCase(next) || "false".equalsIgnoreCase(next)) {
+                    loopCert = Boolean.parseBoolean(next);
+                    i++;
+                } else {
+                    loopCert = true;
+                }
+            }
+            else if (a.startsWith("--user-loop-mode-cert=")) {
+                String v = a.substring("--user-loop-mode-cert=".length());
+                if (!"true".equalsIgnoreCase(v) && !"false".equalsIgnoreCase(v)) {
+                    System.err.println("Error: --user-loop-mode-cert expects true or false, got: " + v);
+                    System.exit(1);
+                }
+                loopCert = Boolean.parseBoolean(v);
+            }
             else if ("--help".equals(a))                           { printUsage(); return; }
             else if (a.startsWith("-")) {
                 System.err.println("Unknown option: " + a);
@@ -146,7 +174,7 @@ public final class Main {
             // Accept the loop UUID with or without the server's "L" prefix: strip a
             // single leading 'L' so the value sent on the wire is the bare UUID.
             if (lu != null && lu.startsWith("L")) lu = lu.substring(1);
-            loop = new LoopModeInfo(loopMaxDelay, 0, 0, loopCounter, lu);
+            loop = new LoopModeInfo(loopMaxDelay, 0, loopMaxTests, loopCounter, lu, loopCert);
         }
 
         System.out.println("Contacting control server: " + host);
@@ -363,6 +391,8 @@ public final class Main {
                   --user-loop-mode-max-delay MIN     Max delay between iterations (minutes)
                   --user-loop-mode-test-counter N    0-based iteration index
                   --user-loop-mode-uuid UUID         Server loop UUID; omit on the first iteration
+                  --user-loop-mode-max-tests N       Planned number of tests in the loop (positive)
+                  --user-loop-mode-cert [true|false] Certification mode (bare flag = true)
                   --help              Print this help
             """);
     }

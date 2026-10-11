@@ -78,6 +78,8 @@ Skip TLS verification against a local test server:
 | `--user-loop-mode-max-delay MIN` | Max waiting time between loop iterations, in minutes (`loopmode_info.max_delay`) |
 | `--user-loop-mode-test-counter N` | 0-based index of this iteration within the loop (`loopmode_info.test_counter`) |
 | `--user-loop-mode-uuid UUID` | Server loop UUID to echo on the **second and later** iterations. **Omit it on the first iteration** — see [Loop mode](#loop-mode). Accepted with or without the server's `L` prefix. |
+| `--user-loop-mode-max-tests N` | Optional: planned number of tests in the loop, a positive integer (`loopmode_info.max_tests`; omitted when not given) |
+| `--user-loop-mode-cert [true\|false]` | Optional: certification mode. Bare flag = `true`; `--user-loop-mode-cert=false` or `--user-loop-mode-cert false` for an explicit value (`loopmode_info.cert_mode`; omitted when not given) |
 | `--help` | Print help |
 
 ### Loop mode

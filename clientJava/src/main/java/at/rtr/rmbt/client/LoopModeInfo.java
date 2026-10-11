@@ -5,15 +5,18 @@ package at.rtr.rmbt.client;
  * one <em>loop</em> on the control server.
  *
  * <p>Serialized exactly as the server's {@code LoopModeSettings}: {@code max_delay},
- * {@code max_movement}, {@code max_tests}, {@code test_counter}, {@code loop_uuid}.
+ * {@code max_movement}, {@code max_tests}, {@code test_counter}, {@code loop_uuid},
+ * {@code cert_mode} ({@code max_tests} and {@code cert_mode} only when given).
  * See {@code doc/json_interface.md}.
  *
  * @param maxDelay    max waiting time between iterations, in minutes
  * @param maxMovement max movement in metres before a new loop; always 0 here
  *                    (this client does not perform signal/GPS measurement)
- * @param maxTests    planned number of tests in the loop; 0 when unbounded/unknown
+ * @param maxTests    planned number of tests in the loop; {@code null} = omitted
  * @param testCounter 0-based index of this iteration within the loop
  * @param loopUuid    server loop UUID; {@code null} on the first iteration (the
  *                    server mints one and returns it), echoed thereafter
+ * @param certMode    certification mode; {@code null} = omitted
  */
-record LoopModeInfo(int maxDelay, int maxMovement, int maxTests, int testCounter, String loopUuid) {}
+record LoopModeInfo(int maxDelay, int maxMovement, Integer maxTests, int testCounter, String loopUuid,
+                    Boolean certMode) {}

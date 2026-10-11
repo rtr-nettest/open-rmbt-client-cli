@@ -126,6 +126,13 @@ fn run() -> Result<()> {
         .arg(Arg::new("user-loop-mode-max-delay").long("user-loop-mode-max-delay").value_name("MIN"))
         .arg(Arg::new("user-loop-mode-test-counter").long("user-loop-mode-test-counter").value_name("N"))
         .arg(Arg::new("user-loop-mode-uuid").long("user-loop-mode-uuid").value_name("UUID"))
+        .arg(Arg::new("user-loop-mode-max-tests").long("user-loop-mode-max-tests").value_name("N")
+            .value_parser(clap::value_parser!(u32).range(1..))
+            .help("Planned number of tests in the loop (positive); sent as loopmode_info.max_tests"))
+        .arg(Arg::new("user-loop-mode-cert").long("user-loop-mode-cert").value_name("BOOL")
+            .num_args(0..=1).default_missing_value("true")
+            .value_parser(clap::value_parser!(bool))
+            .help("Certification mode: bare flag or true/false; sent as loopmode_info.cert_mode"))
         .get_matches_from(argv);
 
     let raw_host      = matches.get_one::<String>("host").unwrap();
@@ -179,7 +186,10 @@ fn run() -> Result<()> {
             .map(|s| s.trim())
             .filter(|s| !s.is_empty() && *s != "null")
             .map(|s| s.strip_prefix('L').unwrap_or(s).to_string());
-        Some(control::LoopModeInfo { max_delay, max_movement: 0, max_tests: 0, test_counter, loop_uuid })
+        // Optional: sent only when given on the command line.
+        let max_tests = matches.get_one::<u32>("user-loop-mode-max-tests").copied();
+        let cert_mode = matches.get_one::<bool>("user-loop-mode-cert").copied();
+        Some(control::LoopModeInfo { max_delay, max_movement: 0, max_tests, test_counter, loop_uuid, cert_mode })
     } else {
         None
     };

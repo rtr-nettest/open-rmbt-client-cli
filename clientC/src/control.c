@@ -272,6 +272,7 @@ int control_request_test(const char *host, const char *uuid,
                          int use_ws, const char *prefer_server,
                          int loop_mode, int loop_max_delay,
                          int loop_test_counter, const char *loop_uuid,
+                         int loop_max_tests, int loop_cert,
                          int debug, TestParams *out)
 {
     char url[512];
@@ -301,18 +302,25 @@ int control_request_test(const char *host, const char *uuid,
      * loopmode_info. loop_uuid is null on the first iteration (server mints one)
      * and echoed thereafter. See doc/json_interface.md.
      */
-    char loop_frag[384];
+    char loop_frag[448];
     if (loop_mode) {
         char uuid_field[160];
         if (loop_uuid && *loop_uuid)
             snprintf(uuid_field, sizeof(uuid_field), "\"loop_uuid\":\"%s\"", loop_uuid);
         else
             snprintf(uuid_field, sizeof(uuid_field), "\"loop_uuid\":null");
+        /* Optional fields: only sent when given on the command line. */
+        char tests_field[40] = "";
+        if (loop_max_tests > 0)
+            snprintf(tests_field, sizeof(tests_field), "\"max_tests\":%d,", loop_max_tests);
+        const char *cert_field = loop_cert < 0 ? ""
+                               : loop_cert   ? ",\"cert_mode\":true"
+                               :               ",\"cert_mode\":false";
         snprintf(loop_frag, sizeof(loop_frag),
                  ",\"measurement_type\":\"LOOP_ACTIVE\",\"loopmode\":true,"
                  "\"loopmode_info\":{\"max_delay\":%d,\"max_movement\":0,"
-                 "\"max_tests\":0,\"test_counter\":%d,%s}",
-                 loop_max_delay, loop_test_counter, uuid_field);
+                 "%s\"test_counter\":%d,%s%s}",
+                 loop_max_delay, tests_field, loop_test_counter, uuid_field, cert_field);
     } else {
         snprintf(loop_frag, sizeof(loop_frag), ",\"measurement_type\":\"REGULAR\"");
     }

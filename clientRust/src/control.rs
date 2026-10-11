@@ -47,8 +47,8 @@ pub struct TestParams {
 /// *loop* on the control server.
 ///
 /// Serialized exactly as the server's `LoopModeSettings`: `max_delay`,
-/// `max_movement`, `max_tests`, `test_counter`, `loop_uuid`. See
-/// `doc/json_interface.md`.
+/// `max_movement`, `max_tests`, `test_counter`, `loop_uuid`, `cert_mode`
+/// (`max_tests` and `cert_mode` only when given). See `doc/json_interface.md`.
 #[derive(Serialize)]
 pub struct LoopModeInfo {
     /// Max waiting time between iterations, in minutes
@@ -57,14 +57,19 @@ pub struct LoopModeInfo {
     /// Max movement in metres before a new loop starts. Always `0` here — this
     /// client does not perform signal/GPS measurement.
     pub max_movement: u32,
-    /// Planned number of tests in the loop; `0` when unbounded/unknown.
-    pub max_tests:    u32,
+    /// Planned number of tests in the loop (`--user-loop-mode-max-tests`);
+    /// omitted when not given.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tests:    Option<u32>,
     /// 0-based index of this iteration within the loop
     /// (`--user-loop-mode-test-counter`).
     pub test_counter: u32,
     /// Server loop UUID. `null` on the first iteration (the server mints one and
     /// returns it in the response); echoed back on every subsequent iteration.
     pub loop_uuid:    Option<String>,
+    /// Certification mode (`--user-loop-mode-cert`); omitted when not given.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cert_mode:    Option<bool>,
 }
 
 // ─── Wire types ───────────────────────────────────────────────────────────────
